@@ -51,7 +51,7 @@ socket.on("gameStarted", (data) => {
   const gs = data.gameState;
 
   playerNames = [...gs.playerNames];
-  mySeatIndex = data.mySeatIndex;   // THIS client's seat in the 4-player layout
+  mySeatIndex = data.mySeatIndex;
   nextRoundStarter = 0;
   resolving = false;
   giftedIds = new Set();
@@ -60,16 +60,20 @@ socket.on("gameStarted", (data) => {
   G = {
     ...gs,
     roomCode: data.roomCode,
-    isHost: G.isHost
+    isHost: G.isHost,
+    giftSubmitted: false,
+    roomMsg: ''
   };
 
   render();
 });
 
-// Live game state pushed after any playCard (same shape as gameStarted payload)
+// Live game state pushed after submitGift or playCard
 socket.on("gameState", (data) => {
-  console.log("Game state update — seat", data.mySeatIndex, "room", data.roomCode);
+  console.log("Game state update — phase:", data.gameState.phase, "seat", data.mySeatIndex);
   const gs = data.gameState;
+  const wasGift = G.phase === 'gift';
+  const nowPlay = gs.phase === 'play';
 
   playerNames = [...gs.playerNames];
   mySeatIndex = data.mySeatIndex;
@@ -77,8 +81,20 @@ socket.on("gameState", (data) => {
   G = {
     ...gs,
     roomCode: data.roomCode,
-    isHost: G.isHost
+    isHost: G.isHost,
+    giftSubmitted: gs.phase === 'gift' ? (G.giftSubmitted || false) : false,
+    roomMsg: gs.phase === 'gift' ? (G.roomMsg || '') : ''
   };
+
+  // When transitioning gift→play, highlight the incoming gift cards for this seat
+  if (wasGift && nowPlay) {
+    resolving = false;
+    giftedIds = new Set();
+    stopTimer();
+    // The server handed us updated hands; we can't easily know which are new,
+    // so skip glow for online (local Quick Play still does it via doGifts)
+    if (G.currentPlayer === mySeatIndex) startTimer();
+  }
 
   render();
 });
@@ -715,6 +731,7 @@ function buildGiftHTML(){
 
   const selSet=new Set(G.selected.map(c=>c.id));
   const hand=G.hands[mySeatIndex];
+  const canSelectGift = !G.giftSubmitted;  // lock hand after submitting online
   const violation=G.selected.length>0&&giftViolatesColor(hand,G.selected);
   const n=hand.length;
   const handHTML=hand.map((c,i)=>{
@@ -725,7 +742,7 @@ function buildGiftHTML(){
     const ptag=p>0?`<span class="ptag">${p}</span>`:'';
     const cc=COLOR_CLASS[c.color];
     return `<div style="transform:rotate(${offset}deg) translateY(${yOff}px);transform-origin:bottom center;display:inline-block">
-      <div class="card ${cc}${sel?' selected':''}" data-gift="${c.id}" style="cursor:pointer">
+      <div class="card ${cc}${sel?' selected':''}" ${canSelectGift?`data-gift="${c.id}" style="cursor:pointer"`:'style="opacity:0.6"'}>
         ${ptag}
         <span class="corner tl">${lbl(c)}</span>
         <div class="cnum">${lbl(c)}</div>
@@ -793,9 +810,12 @@ function buildGiftHTML(){
       <span class="pscore">${G.scores[meSeat]}pts</span>
     </div>
     <div id="my-hand">${handHTML}</div>
-    <button class="chip-btn gold" onclick="confirmGift()" ${G.selected.length!==3||violation?'disabled':''}>
-      Gift selected ->
-    </button>
+    ${G.giftSubmitted
+      ? `<div class="room-msg" style="margin-top:6px">Waiting for other players to gift…</div>`
+      : `<button class="chip-btn gold" onclick="confirmGift()" ${G.selected.length!==3||violation?'disabled':''}>
+           Gift selected ->
+         </button>`
+    }
   </div>
 
 </div>`;
@@ -1071,7 +1091,18 @@ function buildRoomLobbyHTML(){
 }
 
 window.confirmGift=function(){
-  if(G.selected.length!==3||giftViolatesColor(G.hands[0],G.selected))return;
+  const hand=G.hands[mySeatIndex];
+  if(G.selected.length!==3||giftViolatesColor(hand,G.selected))return;
+  if(G.roomCode){
+    // Online: send to server; server applies all gifts and broadcasts play phase
+    socket.emit('submitGift',{roomCode:G.roomCode,cardIds:G.selected.map(c=>c.id)});
+    G.giftSubmitted=true;
+    G.roomMsg='Waiting for other players to gift…';
+    G.selected=[];
+    render();
+    return;
+  }
+  // Local Quick Play
   G.gifts[0]=[...G.selected];setTimeout(doGifts,300);
 };
 window.nextRound=function(){G.modal=null;newRound();};

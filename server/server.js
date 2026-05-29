@@ -51,6 +51,59 @@ function sortHand(h) {
   });
 }
 
+function pts(c) {
+  if (c.color === 'blue'  && c.type === 'draw2') return 13;
+  if (c.color === 'yellow' && c.type === '0')    return 10;
+  if (c.color === 'red')                          return 1;
+  return 0;
+}
+function isLee(c) {
+  return (c.color === 'blue' && c.type === 'draw2') ||
+         (c.color === 'yellow' && c.type === '0');
+}
+function str(c) { return STRENGTH[c.type] || 0; }
+
+// Mirror of client giftViolatesColor: when holding a Lee, you cannot empty any color
+function giftViolatesColor(hand, sel) {
+  if (!hand.some(c => isLee(c))) return false;
+  const selIds = new Set(sel.map(c => c.id));
+  const groups = {};
+  hand.forEach(c => { (groups[c.color] = groups[c.color] || []).push(c); });
+  return Object.values(groups).some(cards => cards.every(c => selIds.has(c.id)));
+}
+
+// Simple bot gift: highest-point cards first, respecting giftViolatesColor
+function chooseSimpleGift(hand) {
+  const sorted = [...hand].sort((a, b) => pts(b) - pts(a) || str(b) - str(a));
+  const chosen = [];
+  for (const c of sorted) {
+    if (chosen.length === 3) break;
+    if (!giftViolatesColor(hand, [...chosen, c])) chosen.push(c);
+  }
+  // If Lee constraint blocked us, fill remaining slots ignoring it
+  for (const c of sorted) {
+    if (chosen.length === 3) break;
+    if (!chosen.includes(c)) chosen.push(c);
+  }
+  return chosen;
+}
+
+// Apply all 4 gifts simultaneously: each seat's chosen cards go to (seat+1)%4
+function applyGifts(game) {
+  const nh = game.hands.map(h => [...h]);
+  const gs = game.gifts;
+  // Remove gifted cards from each sender
+  for (let i = 0; i < 4; i++) {
+    const giftIds = new Set(gs[i].map(c => c.id));
+    nh[i] = nh[i].filter(c => !giftIds.has(c.id));
+  }
+  // Add gifted cards to each receiver
+  for (let i = 0; i < 4; i++) {
+    gs[i].forEach(c => nh[(i + 1) % 4].push(c));
+  }
+  game.hands = nh.map(sortHand);
+}
+
 function dealGame(playerNames) {
   const deck = shuffle(buildDeck());
   const hands = [[], [], [], []];
@@ -233,6 +286,65 @@ io.on("connection", (socket) => {
     console.log("Room", roomCode, "game started — deck dealt server-side. Players:", playerNames);
   });
 
+  // ── SUBMIT GIFT ───────────────────────────────────────────
+  socket.on("submitGift", ({ roomCode, cardIds }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || !room.game) { socket.emit("lobbyError", "Game not found."); return; }
+
+    const game = room.game;
+    if (game.phase !== 'gift') { socket.emit("lobbyError", "Not in gift phase."); return; }
+
+    const seatIndex = room.seats.findIndex(s => s && s.id === socket.id);
+    if (seatIndex === -1) { socket.emit("lobbyError", "You are not in this game."); return; }
+    if (game.gifts[seatIndex]) { socket.emit("lobbyError", "You already submitted your gift."); return; }
+
+    if (!Array.isArray(cardIds) || cardIds.length !== 3) {
+      socket.emit("lobbyError", "You must select exactly 3 cards."); return;
+    }
+
+    const hand = game.hands[seatIndex];
+    const chosen = cardIds.map(id => hand.find(c => c.id === id)).filter(Boolean);
+    if (chosen.length !== 3) { socket.emit("lobbyError", "One or more cards not found in your hand."); return; }
+    if (giftViolatesColor(hand, chosen)) { socket.emit("lobbyError", "Invalid gift: cannot empty a color while holding a Lee5a."); return; }
+
+    game.gifts[seatIndex] = chosen;
+    console.log(`Room ${roomCode}: seat ${seatIndex} submitted gift [${cardIds.join(',')}]`);
+
+    // Auto-submit gifts for all bot seats that haven't submitted yet
+    room.seats.forEach((seat, idx) => {
+      if (seat && seat.type === 'bot' && !game.gifts[idx]) {
+        game.gifts[idx] = chooseSimpleGift(game.hands[idx]);
+        console.log(`Room ${roomCode}: bot seat ${idx} auto-gifted [${game.gifts[idx].map(c=>c.id).join(',')}]`);
+      }
+    });
+
+    // Broadcast partial update so the submitting player sees "waiting" state
+    // (We only broadcast to real players; their mySeatIndex is preserved)
+    const pendingCount = game.gifts.filter(Boolean).length;
+    console.log(`Room ${roomCode}: ${pendingCount}/4 gifts submitted`);
+
+    // Check if all 4 gifts are ready
+    if (game.gifts.every(Boolean)) {
+      applyGifts(game);
+      game.phase = 'play';
+      game.currentPlayer = 0;
+      game.leadColor = null;
+      game.table = [];
+      game.selected = [];
+      game.trickComplete = false;
+      game.statusMsg = `${game.playerNames[0]}'s turn`;
+      console.log(`Room ${roomCode}: all gifts done — transitioning to play phase`);
+    }
+
+    // Broadcast to all real players with personal seat index
+    room.seats.forEach((seat, idx) => {
+      if (seat && seat.id) {
+        io.to(seat.id).emit("gameState", { roomCode, gameState: game, mySeatIndex: idx });
+      }
+    });
+  });
+
   // ── PLAY CARD ─────────────────────────────────────────────
   socket.on("playCard", ({ roomCode, cardId }) => {
     roomCode = normalizeRoomCode(roomCode);
@@ -244,6 +356,7 @@ io.on("connection", (socket) => {
     if (seatIndex === -1) { socket.emit("lobbyError", "You are not in this game."); return; }
 
     const game = room.game;
+    if (game.phase !== 'play') { socket.emit("lobbyError", "Game is not in play phase."); return; }
     if (game.currentPlayer !== seatIndex) {
       socket.emit("lobbyError", "It is not your turn."); return;
     }
