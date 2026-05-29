@@ -1008,7 +1008,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   justify-content:flex-start;
   gap:6px;
   min-height:250px;
-  padding-bottom:12px;
+  padding-bottom:30px;
   overflow:visible;
 }
 
