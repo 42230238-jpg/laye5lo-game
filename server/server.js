@@ -338,12 +338,182 @@ io.on("connection", (socket) => {
     }
 
     // Broadcast to all real players with personal seat index
-    room.seats.forEach((seat, idx) => {
-      if (seat && seat.id) {
-        io.to(seat.id).emit("gameState", { roomCode, gameState: game, mySeatIndex: idx });
-      }
-    });
+    broadcastGameState(roomCode);
+
+    // If game just started play phase and seat 0 is a bot, kick off bot turn
+    if (game.phase === 'play' && isBotSeat(room, game.currentPlayer)) {
+      setTimeout(() => scheduleBotPlay(roomCode), 750);
+    }
   });
+
+// ── BOT / PLAY HELPERS ───────────────────────────────────
+
+function isBotSeat(room, idx) {
+  return !!(room.seats[idx] && room.seats[idx].type === 'bot');
+}
+
+// Same 3-rule logic as client getPlayable
+function getPlayableServer(game, seatIndex) {
+  const hand = game.hands[seatIndex];
+  if (!game.leadColor) return hand;
+  const suited = hand.filter(c => c.color === game.leadColor);
+  if (suited.length) return suited;
+  const lees = hand.filter(c => isLee(c));
+  if (lees.length) return lees;
+  return hand;
+}
+
+// Simple bot card choice — mirrors the spirit of client pickEasyCard
+function chooseBotCard(game, seatIndex) {
+  const pl = getPlayableServer(game, seatIndex);
+  if (!game.leadColor) {
+    // Leading: play lowest-strength non-point card; fallback to lowest-strength
+    const safe = pl.filter(c => pts(c) === 0);
+    const pool = safe.length ? safe : pl;
+    return pool.reduce((best, c) => str(c) < str(best) ? c : best, pool[0]);
+  }
+  // Following suit
+  const suited = pl.filter(c => c.color === game.leadColor);
+  if (suited.length) {
+    // Try to stay under current winner
+    const tableMax = Math.max(...game.table
+      .filter(t => t.card.color === game.leadColor)
+      .map(t => str(t.card)), 0);
+    const under = suited.filter(c => str(c) < tableMax);
+    if (under.length) return under.reduce((best, c) => str(c) > str(best) ? c : best, under[0]);
+    // Can't go under — play lowest
+    return suited.reduce((best, c) => str(c) < str(best) ? c : best, suited[0]);
+  }
+  // Off-suit: dump highest-point card first, else highest-strength
+  const byPts = [...pl].sort((a, b) => pts(b) - pts(a) || str(b) - str(a));
+  return byPts[0];
+}
+
+// Trick winner: highest-strength card of lead color wins
+function trickWinnerServer(table, leadColor) {
+  const lead = table.filter(t => t.card.color === leadColor);
+  return lead.reduce((best, t) => str(t.card) > str(best.card) ? t : best, lead[0]);
+}
+
+// Broadcast current game state to all real players in the room
+function broadcastGameState(roomCode) {
+  const room = rooms[roomCode];
+  if (!room) return;
+  room.seats.forEach((seat, idx) => {
+    if (seat && seat.id) {
+      io.to(seat.id).emit("gameState", { roomCode, gameState: room.game, mySeatIndex: idx });
+    }
+  });
+}
+
+// Core play logic — used by both the human playCard event and bot auto-play
+function playCardForSeat(roomCode, seatIndex, cardId) {
+  const room = rooms[roomCode];
+  if (!room || !room.game) return false;
+  const game = room.game;
+  if (game.phase !== 'play') return false;
+  if (game.currentPlayer !== seatIndex) return false;
+
+  // Find the card
+  const hand = game.hands[seatIndex];
+  const card = hand.find(c => c.id === cardId);
+  if (!card) return false;
+
+  // Validate playability
+  const playable = getPlayableServer(game, seatIndex);
+  if (!playable.find(c => c.id === cardId)) return false;
+
+  // Remove from hand, add to table
+  game.hands[seatIndex] = sortHand(hand.filter(c => c.id !== cardId));
+  if (!game.playedCards) game.playedCards = [];
+  game.playedCards.push(card);
+  game.table.push({ pi: seatIndex, card });
+  if (!game.leadColor) game.leadColor = card.color;
+
+  const leesOnTable = game.table.filter(t => isLee(t.card)).length;
+  const trickDone   = game.table.length === 4 || leesOnTable === 2;
+
+  if (trickDone) {
+    // ── Score and finish the trick ──────────────────────────
+    const trickPts = leesOnTable === 2
+      ? 37
+      : game.table.reduce((s, t) => s + pts(t.card), 0);
+
+    const winner = trickWinnerServer(game.table, game.leadColor);
+    const wi = winner.pi;
+
+    game.roundPts[wi] = (game.roundPts[wi] || 0) + trickPts;
+
+    const msg = leesOnTable === 2
+      ? `${game.playerNames[wi]} took both Lee5as! +37 pts`
+      : `${game.playerNames[wi]} wins trick${trickPts > 0 ? ` (+${trickPts}pts)` : ''}`;
+
+    game.statusMsg = msg;
+    console.log(`Room ${roomCode}: trick won by seat ${wi} — ${msg}`);
+
+    // Clear table and prepare next trick (or end round)
+    game.table = [];
+    game.leadColor = null;
+
+    const roundOver = leesOnTable === 2 || game.hands.every(h => h.length === 0);
+
+    if (roundOver) {
+      // Tally round scores
+      game.scores = game.scores.map((s, i) => s + (game.roundPts[i] || 0));
+      const maxScore = Math.max(...game.scores);
+      const gameOver = maxScore >= 101;
+
+      game.phase = gameOver ? 'gameEnd' : 'roundEnd';
+      game.modal = {
+        type: gameOver ? 'gameEnd' : 'roundEnd',
+        rp: [...game.roundPts],
+        sc: [...game.scores]
+      };
+      game.roundPts = [0, 0, 0, 0];
+      console.log(`Room ${roomCode}: round over — scores: ${game.scores}`);
+
+      broadcastGameState(roomCode);
+      return true;   // no bot scheduling after round end
+    }
+
+    // Next trick starts with the winner
+    game.currentPlayer = wi;
+    game.statusMsg = `${game.playerNames[wi]}'s turn`;
+
+  } else {
+    // Trick still in progress — advance to next seat
+    game.currentPlayer = (seatIndex + 1) % 4;
+    game.statusMsg = `${game.playerNames[game.currentPlayer]}'s turn`;
+  }
+
+  broadcastGameState(roomCode);
+
+  // Schedule bot play if the next seat is a bot
+  const next = game.currentPlayer;
+  if (game.phase === 'play' && isBotSeat(room, next)) {
+    setTimeout(() => scheduleBotPlay(roomCode), 750);
+  }
+
+  return true;
+}
+
+// Called by setTimeout — picks and plays a card for the current bot seat
+function scheduleBotPlay(roomCode) {
+  const room = rooms[roomCode];
+  if (!room || !room.game) return;
+  const game = room.game;
+  if (game.phase !== 'play') return;
+
+  const seatIndex = game.currentPlayer;
+  if (!isBotSeat(room, seatIndex)) return;  // safety: skip if seat changed
+
+  const card = chooseBotCard(game, seatIndex);
+  if (!card) return;
+
+  console.log(`Room ${roomCode}: bot seat ${seatIndex} plays ${card.id}`);
+  playCardForSeat(roomCode, seatIndex, card.id);
+  // playCardForSeat will schedule the next bot if needed
+}
 
   // ── PLAY CARD ─────────────────────────────────────────────
   socket.on("playCard", ({ roomCode, cardId }) => {
@@ -351,68 +521,17 @@ io.on("connection", (socket) => {
     const room = rooms[roomCode];
     if (!room || !room.game) { socket.emit("lobbyError", "Game not found."); return; }
 
-    // Find this socket's seat
+    // Identify the sender's seat
     const seatIndex = room.seats.findIndex(s => s && s.id === socket.id);
     if (seatIndex === -1) { socket.emit("lobbyError", "You are not in this game."); return; }
 
     const game = room.game;
     if (game.phase !== 'play') { socket.emit("lobbyError", "Game is not in play phase."); return; }
-    if (game.currentPlayer !== seatIndex) {
-      socket.emit("lobbyError", "It is not your turn."); return;
-    }
+    if (game.currentPlayer !== seatIndex) { socket.emit("lobbyError", "It is not your turn."); return; }
 
-    // Find and validate the card
-    const cardIdx = game.hands[seatIndex].findIndex(c => c.id === cardId);
-    if (cardIdx === -1) { socket.emit("lobbyError", "Card not found in your hand."); return; }
-
-    // Validate lead-color rule (must follow suit if possible, else Lee, else anything)
-    const hand = game.hands[seatIndex];
-    const card = hand[cardIdx];
-    if (game.leadColor) {
-      const hasSuit = hand.some(c => c.color === game.leadColor);
-      const hasLee  = hand.some(c => (c.color==='blue'&&c.type==='draw2')||(c.color==='yellow'&&c.type==='0'));
-      if (hasSuit && card.color !== game.leadColor) {
-        socket.emit("lobbyError", "You must follow the lead color."); return;
-      }
-      if (!hasSuit && hasLee && !((card.color==='blue'&&card.type==='draw2')||(card.color==='yellow'&&card.type==='0'))) {
-        socket.emit("lobbyError", "You must play a Lee5a when you have no lead-color cards."); return;
-      }
-    }
-
-    // Remove from hand, add to table
-    game.hands[seatIndex] = sortHand(hand.filter(c => c.id !== cardId));
-    if (!game.playedCards) game.playedCards = [];
-    game.playedCards.push(card);
-    game.table.push({ pi: seatIndex, card });
-    if (!game.leadColor) game.leadColor = card.color;
-
-    // Check if both lees landed in this trick → round ends immediately
-    const leesOnTable = game.table.filter(t =>
-      (t.card.color==='blue'&&t.card.type==='draw2') ||
-      (t.card.color==='yellow'&&t.card.type==='0')
-    ).length;
-
-    if (leesOnTable === 2 || game.table.length === 4) {
-      // Trick complete — advance to next player (full scoring handled client-side for now)
-      game.trickComplete = true;
-      game.statusMsg = leesOnTable === 2
-        ? 'Both Lee5as taken! Round ends now.'
-        : 'Trick complete...';
-    } else {
-      // Advance to next real player (skip bots — bots are handled client-side for now)
-      let next = (seatIndex + 1) % 4;
-      game.currentPlayer = next;
-      const nextName = game.playerNames[next];
-      game.statusMsg = `${nextName}'s turn`;
-    }
-
-    // Broadcast updated game state to all players with their personal seat index
-    room.seats.forEach((seat, idx) => {
-      if (seat && seat.id) {
-        io.to(seat.id).emit("gameState", { roomCode, gameState: game, mySeatIndex: idx });
-      }
-    });
-    console.log(`Room ${roomCode}: seat ${seatIndex} played ${cardId}`);
+    const ok = playCardForSeat(roomCode, seatIndex, cardId);
+    if (!ok) socket.emit("lobbyError", "Invalid card or move.");
+    // broadcastGameState is called inside playCardForSeat
   });
 
   // ── DISCONNECT ────────────────────────────────────────────
