@@ -19,6 +19,60 @@ function playRandomLee5aSound() {
   });
 }
 
+// ── SYNTHESISED SOUND EFFECTS ────────────────────────────
+// Card drop: short percussive thud using a decaying oscillator + noise burst
+function playCardDropSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Low thud
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(160, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.55, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.18);
+    // Crisp click layer
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) * 0.35;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const clickGain = ctx.createGain();
+    clickGain.gain.setValueAtTime(1, ctx.currentTime);
+    src.connect(clickGain);
+    clickGain.connect(ctx.destination);
+    src.start(ctx.currentTime);
+    setTimeout(() => ctx.close(), 500);
+  } catch(e) {}
+}
+
+// Your-turn ding: two-tone pleasant chime
+function playYourTurnSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [[523, 0, 0.18], [659, 0.15, 0.32]].forEach(([freq, startOff, dur]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t = ctx.currentTime + startOff;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.28, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + dur);
+    });
+    setTimeout(() => ctx.close(), 800);
+  } catch(e) {}
+}
+
 let lastLee5aSoundCardId = null;
 
 socket.on("connect", () => {
@@ -94,6 +148,7 @@ socket.on("gameState", (data) => {
   const wasRoundEnd = G.phase === 'roundEnd' || G.phase === 'gameEnd';
   const nowPlay = gs.phase === 'play';
   const nowGift = gs.phase === 'gift';
+  const prevTableLen = (G.table || []).length;
 
   // Track this client's seat index for diamond positioning
   if (data.mySeatIndex !== undefined) mySeatIndex = data.mySeatIndex;
@@ -141,6 +196,13 @@ socket.on("gameState", (data) => {
   }
 
   resolving = !!gs.trickResolving;
+
+  // Play drop sound when a new card lands on the table (bot or opponent plays)
+  const newTableLen = (G.table || []).length;
+  if (newTableLen > prevTableLen && nowPlay) {
+    playCardDropSound();
+  }
+
   if (G.currentPlayer === 0 && !resolving && G.phase === 'play') startTimer();
   else stopTimer();
 
@@ -327,6 +389,7 @@ function getPlayable(idx){
 
 function executePlay(pi,card,reason=''){
   stopTimer();
+  playCardDropSound();
   G.botThought=pi!==0&&reason?`${pname(pi)} chose ${lbl(card)} because ${reason}.`:'';
   if(!G.playedCards)G.playedCards=[];
   G.playedCards.push(card);
@@ -645,7 +708,7 @@ function buildHTML(){
   // TABLE CENTER CARDS — diamond layout by relative seat
   // rel 0=bottom(me), 1=right, 2=top(opposite), 3=left
   const SLOT_CLASS  = ['slot-bottom','slot-right','slot-top','slot-left'];
-  const SLOT_ROT    = [0, 6, 0, -6];
+  const SLOT_ROT    = [0, 8, 0, -8]; // bottom/top straight, sides tilted
 
   let tableCards;
   if (G.table.length === 0) {
@@ -883,7 +946,9 @@ function buildModal(){
 function attachEvents(){
   document.querySelectorAll('[data-gift]').forEach(el=>{
     el.addEventListener('click',()=>{
-      const id=el.dataset.gift,card=G.hands[0].find(c=>c.id===id);if(!card)return;
+      const id=el.dataset.gift;
+      const card=G.hands[mySeatIndex].find(c=>c.id===id);
+      if(!card)return;
       const idx=G.selected.findIndex(c=>c.id===id);
       if(idx>=0)G.selected.splice(idx,1);else if(G.selected.length<3)G.selected.push(card);
       render();
@@ -891,10 +956,17 @@ function attachEvents(){
   });
   document.querySelectorAll('[data-play]').forEach(el=>{
     el.addEventListener('click',()=>{
-      if(G.currentPlayer!==0||resolving)return;
-      const id=el.dataset.play,card=G.hands[0].find(c=>c.id===id);if(!card)return;
-      if(!getPlayable(0).find(c=>c.id===card.id))return;
-      executePlay(0,card);
+      if(G.currentPlayer!==mySeatIndex||resolving)return;
+      const id=el.dataset.play;
+      const card=G.hands[mySeatIndex].find(c=>c.id===id);
+      if(!card)return;
+      if(!getPlayable(mySeatIndex).find(c=>c.id===card.id))return;
+      playCardDropSound();
+      if(G.roomCode){
+        socket.emit('playCard',{roomCode:G.roomCode,cardId:id});
+      } else {
+        executePlay(mySeatIndex,card);
+      }
     });
   });
 }
@@ -902,6 +974,7 @@ function attachEvents(){
 // ── TIMER ────────────────────────────────────────────────
 function startTimer(){
   stopTimer();
+  playYourTurnSound();
   turnTimeLeft=20;
   updateTimerBar();
   turnTimer=setInterval(()=>{
