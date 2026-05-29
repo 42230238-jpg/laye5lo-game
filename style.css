@@ -352,10 +352,10 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   align-items:flex-end;
   flex-wrap:nowrap;
   gap:5px;
-  padding:50px 12px 12px;
+  padding:60px 28px 28px;
   overflow-x:auto;
   overflow-y:hidden;
-  scroll-padding-inline:12px;
+  scroll-padding-inline:28px;
   -webkit-overflow-scrolling:touch;
 }
 
@@ -1007,8 +1007,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   align-items:center;
   justify-content:flex-start;
   gap:6px;
-  min-height:250px;
-  padding-bottom:30px;
+  min-height:200px;
+  padding-bottom:12px;
   overflow:visible;
 }
 
