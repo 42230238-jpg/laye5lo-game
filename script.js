@@ -11,14 +11,46 @@ socket.on("disconnect", () => {
 
 socket.on("roomCreated", (data) => {
   console.log("Room created:", data);
-  alert("Room created! Code: " + data.roomCode);
+
+  G = {
+    ...G,
+    phase: "roomLobby",
+    modal: null,
+    roomCode: data.roomCode,
+    roomMsg: "Room created online. Share this code: " + data.roomCode,
+    roomPlayers: mapOnlinePlayers(data.players)
+  };
+
+  render();
 });
 
 socket.on("roomUpdated", (data) => {
   console.log("Room updated:", data);
-  alert("Room updated. Players: " + data.players.length);
+
+  G = {
+    ...G,
+    phase: "roomLobby",
+    modal: null,
+    roomCode: data.roomCode,
+    roomMsg: "Online room updated. Players: " + data.players.length,
+    roomPlayers: mapOnlinePlayers(data.players)
+  };
+
+  render();
 });
 
+function mapOnlinePlayers(players) {
+  const mapped = (players || []).map((p, index) => ({
+    type: index === 0 ? "host" : "player",
+    name: p.name || (index === 0 ? "Host" : `Player ${index + 1}`)
+  }));
+
+  while (mapped.length < 4) {
+    mapped.push(null);
+  }
+
+  return mapped.slice(0, 4);
+}
 socket.on("joinError", (message) => {
   alert(message);
 });
