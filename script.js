@@ -833,8 +833,8 @@ function buildCustomRoomHTML(){
     <p>Create a private room or join one with a shared code.</p>
     ${G.roomMsg?`<div class="room-msg">${G.roomMsg}</div>`:''}
     <div class="room-actions">
-      <button class="menu-btn primary" onclick="showCreateRoom()">Make Custom Room</button>
-      <button class="menu-btn" onclick="showJoinRoom()">Join Custom Room</button>
+      <button class="menu-btn primary" onclick="createOnlineRoom()">Create Room</button>
+<button class="menu-btn" onclick="joinOnlineRoom()">Join Room</button>
       <button class="menu-btn subtle" onclick="backToMenu()">Back</button>
     </div>
   </div>
