@@ -986,9 +986,31 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   display:flex;
   flex-direction:column;
   align-items:center;
-  justify-content:center;
+  justify-content:space-between;
   gap:8px;
   min-height:160px;
+  padding-bottom:6px;
+}
+
+/* status row: my identity + status message side-by-side at bottom of center */
+.status-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  padding:0 8px;
+}
+
+.status-row .my-info{
+  flex-shrink:0;
+  min-height:unset;
+  gap:5px;
+}
+
+.status-row .status-bar{
+  flex:1;
+  min-width:0;
+  text-align:left;
 }
 
 .tz-right{
