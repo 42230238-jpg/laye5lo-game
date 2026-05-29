@@ -30,76 +30,174 @@ function normalizeRoomCode(roomCode) {
 function makeRoomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
-
   for (let i = 0; i < 6; i++) {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
-
   return code;
+}
+
+// Returns the seats array (4 slots, null = empty) for broadcast
+function roomPayload(roomCode) {
+  const room = rooms[roomCode];
+  return {
+    roomCode,
+    hostId: room.hostId,
+    seats: room.seats
+  };
 }
 
 io.on("connection", (socket) => {
   console.log("Player connected:", socket.id);
 
+  // ── CREATE ROOM ──────────────────────────────────────────
   socket.on("createRoom", () => {
     const roomCode = makeRoomCode();
 
     rooms[roomCode] = {
-      players: [{ id: socket.id, name: "Host" }]
+      hostId: socket.id,
+      seats: [
+        { id: socket.id, name: "Host", type: "host" },
+        null,
+        null,
+        null
+      ]
     };
 
     socket.join(roomCode);
-
-    socket.emit("roomCreated", {
-      roomCode,
-      players: rooms[roomCode].players
-    });
-
-    console.log("Room created:", roomCode);
+    socket.emit("roomCreated", roomPayload(roomCode));
+    console.log("Room created:", roomCode, "by", socket.id);
   });
 
+  // ── JOIN ROOM ─────────────────────────────────────────────
   socket.on("joinRoom", ({ roomCode, name }) => {
     roomCode = normalizeRoomCode(roomCode);
-console.log("Join attempt:", roomCode);
-console.log("Existing rooms:", Object.keys(rooms));
+    console.log("Join attempt:", roomCode, "by", socket.id);
+    console.log("Existing rooms:", Object.keys(rooms));
 
     if (!rooms[roomCode]) {
       socket.emit("joinError", "Room not found.");
       return;
     }
 
-    if (rooms[roomCode].players.length >= 4) {
+    const room = rooms[roomCode];
+
+    // Find the first empty seat
+    const emptyIdx = room.seats.findIndex(s => s === null);
+    if (emptyIdx === -1) {
       socket.emit("joinError", "Room is full.");
       return;
     }
 
-    rooms[roomCode].players.push({
-      id: socket.id,
-      name: name || `Player ${rooms[roomCode].players.length + 1}`
-    });
+    const playerName = name || `Player ${emptyIdx + 1}`;
+    room.seats[emptyIdx] = { id: socket.id, name: playerName, type: "player" };
 
     socket.join(roomCode);
-
-    io.to(roomCode).emit("roomUpdated", {
-      roomCode,
-      players: rooms[roomCode].players
-    });
-
-    console.log(socket.id, "joined room", roomCode);
+    io.to(roomCode).emit("roomUpdated", roomPayload(roomCode));
+    console.log(socket.id, "joined room", roomCode, "as", playerName);
   });
 
+  // ── ADD BOT ───────────────────────────────────────────────
+  socket.on("addBotToRoom", ({ roomCode }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+
+    if (!room) { socket.emit("lobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("lobbyError", "Only the host can add bots."); return; }
+
+    const emptyIdx = room.seats.findIndex(s => s === null);
+    if (emptyIdx === -1) { socket.emit("lobbyError", "Room is full."); return; }
+
+    const botNum = room.seats.filter(s => s && s.type === "bot").length + 1;
+    room.seats[emptyIdx] = { id: null, name: `Bot ${botNum}`, type: "bot" };
+
+    io.to(roomCode).emit("roomUpdated", roomPayload(roomCode));
+    console.log("Bot added to room", roomCode, "at seat", emptyIdx);
+  });
+
+  // ── REMOVE SEAT ───────────────────────────────────────────
+  socket.on("removeSeatFromRoom", ({ roomCode, seatIndex }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+
+    if (!room) { socket.emit("lobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("lobbyError", "Only the host can remove seats."); return; }
+
+    const seat = room.seats[seatIndex];
+    if (!seat || seat.type === "host") { socket.emit("lobbyError", "Cannot remove this seat."); return; }
+
+    room.seats[seatIndex] = null;
+
+    io.to(roomCode).emit("roomUpdated", roomPayload(roomCode));
+    console.log("Seat", seatIndex, "removed from room", roomCode);
+  });
+
+  // ── MOVE SEAT ─────────────────────────────────────────────
+  socket.on("moveSeatInRoom", ({ roomCode, seatIndex, direction }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+
+    if (!room) { socket.emit("lobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("lobbyError", "Only the host can move seats."); return; }
+
+    const j = seatIndex + direction;
+    if (j < 0 || j >= 4) { socket.emit("lobbyError", "Cannot move seat out of bounds."); return; }
+
+    const a = room.seats[seatIndex];
+    const b = room.seats[j];
+    if ((a && a.type === "host") || (b && b.type === "host")) {
+      socket.emit("lobbyError", "Cannot move the host seat.");
+      return;
+    }
+
+    room.seats[seatIndex] = b;
+    room.seats[j] = a;
+
+    io.to(roomCode).emit("roomUpdated", roomPayload(roomCode));
+    console.log("Seats", seatIndex, "and", j, "swapped in room", roomCode);
+  });
+
+  // ── START ROOM ────────────────────────────────────────────
+  socket.on("startRoom", ({ roomCode }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+
+    if (!room) { socket.emit("lobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("lobbyError", "Only the host can start the game."); return; }
+
+    const filled = room.seats.filter(Boolean).length;
+    if (filled < 4) { socket.emit("lobbyError", "All 4 seats must be filled before starting."); return; }
+
+    const playerNames = room.seats.map(s => s.name);
+    io.to(roomCode).emit("roomStarted", { roomCode, playerNames });
+    console.log("Room", roomCode, "started with players:", playerNames);
+  });
+
+  // ── DISCONNECT ────────────────────────────────────────────
   socket.on("disconnect", () => {
     for (const roomCode of Object.keys(rooms)) {
       const room = rooms[roomCode];
-      room.players = room.players.filter((p) => p.id !== socket.id);
+      let changed = false;
 
-      if (room.players.length === 0) {
-        delete rooms[roomCode];
-      } else {
-        io.to(roomCode).emit("roomUpdated", {
-          roomCode,
-          players: room.players
-        });
+      room.seats = room.seats.map(seat => {
+        if (seat && seat.id === socket.id) {
+          changed = true;
+          return null;
+        }
+        return seat;
+      });
+
+      if (room.seats.every(s => s === null || s.id === null)) {
+        // Room is empty of real players (only bots left or all empty)
+        const hasRealPlayer = room.seats.some(s => s && s.id !== null);
+        if (!hasRealPlayer) {
+          delete rooms[roomCode];
+          console.log("Room", roomCode, "deleted (no real players left)");
+          continue;
+        }
+      }
+
+      if (changed) {
+        io.to(roomCode).emit("roomUpdated", roomPayload(roomCode));
       }
     }
 

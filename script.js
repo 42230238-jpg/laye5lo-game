@@ -17,8 +17,9 @@ socket.on("roomCreated", (data) => {
     phase: "roomLobby",
     modal: null,
     roomCode: data.roomCode,
-    roomMsg: "Room created online. Share this code: " + data.roomCode,
-    roomPlayers: mapOnlinePlayers(data.players)
+    isHost: true,
+    roomMsg: "Room created! Share this code: " + data.roomCode,
+    roomPlayers: mapOnlineSeats(data.seats)
   };
 
   render();
@@ -27,28 +28,52 @@ socket.on("roomCreated", (data) => {
 socket.on("roomUpdated", (data) => {
   console.log("Room updated:", data);
 
+  // Preserve isHost: true if our socket id matches the hostId the server sent
+  const weAreHost = data.hostId === socket.id;
+
   G = {
     ...G,
     phase: "roomLobby",
     modal: null,
     roomCode: data.roomCode,
-    roomMsg: "Online room updated. Players: " + data.players.length,
-    roomPlayers: mapOnlinePlayers(data.players)
+    isHost: weAreHost,
+    roomMsg: weAreHost
+      ? "Lobby updated. Players: " + data.seats.filter(Boolean).length
+      : "Waiting for host...",
+    roomPlayers: mapOnlineSeats(data.seats)
   };
 
   render();
 });
 
+socket.on("roomStarted", (data) => {
+  console.log("Room started:", data);
+  initGame(data.playerNames);
+});
+
+socket.on("lobbyError", (message) => {
+  console.warn("Lobby error:", message);
+  G.roomMsg = message;
+  render();
+});
+
+// Maps server seats array (4-slot, nulls for empty) to G.roomPlayers format
+function mapOnlineSeats(seats) {
+  const mapped = (seats || []).map(s => {
+    if (!s) return null;
+    return { type: s.type, name: s.name, id: s.id };
+  });
+  while (mapped.length < 4) mapped.push(null);
+  return mapped.slice(0, 4);
+}
+
+// Legacy helper kept for any local (non-online) usage
 function mapOnlinePlayers(players) {
   const mapped = (players || []).map((p, index) => ({
     type: index === 0 ? "host" : "player",
     name: p.name || (index === 0 ? "Host" : `Player ${index + 1}`)
   }));
-
-  while (mapped.length < 4) {
-    mapped.push(null);
-  }
-
+  while (mapped.length < 4) mapped.push(null);
   return mapped.slice(0, 4);
 }
 socket.on("joinError", (message) => {
@@ -909,13 +934,16 @@ function buildJoinRoomHTML(){
 
 function buildRoomLobbyHTML(){
   const players=G.roomPlayers||defaultRoomPlayers();
+  const isOnline=!!G.roomCode&&G.roomCode.length>0;
+  const isHost=!isOnline||G.isHost;  // local Quick Room always acts as host; online checks flag
   const filled=players.filter(Boolean).length;
   const canStart=filled===4;
   const seats=players.map((p,i)=>{
     const label=p?p.name:'Empty';
     const kind=p?p.type:'empty';
-    const canAddBot=!p;
-    const canRemoveSeat=p&&p.type!=='host';
+    const canAddBot=!p&&isHost;
+    const canRemoveSeat=p&&p.type!=='host'&&isHost;
+    const canMove=isHost;
     return `<div class="seat-wrap">
     <div class="seat-number">Seat ${i+1}</div>
     <div class="seat-card ${kind}">
@@ -927,28 +955,29 @@ function buildRoomLobbyHTML(){
         </div>
       </div>
       <div class="seat-controls">
-        <button class="seat-btn" onclick="moveSeat(${i},-1)" ${i===0||kind==='host'?'disabled':''}>Up</button>
-        <button class="seat-btn" onclick="moveSeat(${i},1)" ${i===3||kind==='host'?'disabled':''}>Down</button>
-        ${canAddBot?`<button class="seat-btn" onclick="addPlayerToSeat(${i})">Player</button>`:''}
+        ${canMove?`<button class="seat-btn" onclick="moveSeat(${i},-1)" ${i===0||kind==='host'?'disabled':''}>Up</button>`:''}
+        ${canMove?`<button class="seat-btn" onclick="moveSeat(${i},1)" ${i===3||kind==='host'?'disabled':''}>Down</button>`:''}
         ${canAddBot?`<button class="seat-btn gold" onclick="addBotToSeat(${i})">Bot</button>`:''}
         ${canRemoveSeat?`<button class="seat-btn danger" onclick="removeSeat(${i})">Remove</button>`:''}
       </div>
     </div>
     </div>`;
   }).join('');
+  const hostNote=!isHost?'<div class="room-msg">Waiting for host to start the game…</div>':'';
   return `
 <button class="back-arrow" onclick="backToMenu()" aria-label="Back to menu">&lsaquo;</button>
 <div class="menu-screen lobby-screen">
   <div class="lobby-head">
     <h1>Room ${G.roomCode||'------'}</h1>
-    <p>Host can arrange seats and fill missing spots with bots.</p>
+    <p>${isHost?'Host: arrange seats and fill missing spots with bots.':'Joined as player. Host controls the lobby.'}</p>
   </div>
-  ${buildDifficultyPicker()}
+  ${isHost?buildDifficultyPicker():''}
   <div class="seat-grid">${seats}</div>
   ${G.roomMsg?`<div class="room-msg">${G.roomMsg}</div>`:''}
+  ${hostNote}
   <div class="room-actions">
-    <button class="menu-btn primary" onclick="startCustomRoom()" ${canStart?'':'disabled'}>Start Game</button>
-    <button class="menu-btn" onclick="addNextBot()" ${filled>=4?'disabled':''}>Add Bot</button>
+    ${isHost?`<button class="menu-btn primary" onclick="startCustomRoom()" ${canStart?'':'disabled'}>Start Game</button>`:''}
+    ${isHost?`<button class="menu-btn" onclick="addNextBot()" ${filled>=4?'disabled':''}>Add Bot</button>`:''}
     <button class="menu-btn subtle" onclick="openCustomRoom()">Room Code</button>
   </div>
 </div>`;
@@ -976,17 +1005,27 @@ window.joinCustomRoom=function(){
   const input=document.getElementById('join-room-code');
   const raw=(input&&input.value?input.value:G.joinCode||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(raw.length<6){G.roomMsg='Enter a 6-character room code.';render();return;}
-  const code=raw.slice(0,3)+'-'+raw.slice(3,6);
-  G={phase:'roomLobby',modal:null,roomCode:code,roomMsg:'Joined room locally. Online joining needs the realtime server next.',roomPlayers:defaultRoomPlayers()};
-  render();
+  const name=prompt('Your name:')||'Player';
+  G.roomMsg='Joining…';render();
+  socket.emit('joinRoom',{roomCode:raw,name});
 };
 window.startCustomRoom=function(){
+  if(G.roomCode){
+    // Online mode: ask server to validate and broadcast roomStarted to everyone
+    socket.emit("startRoom",{roomCode:G.roomCode});
+    return;
+  }
+  // Local mode
   const players=G.roomPlayers||[];
   if(players.filter(Boolean).length<4){G.roomMsg='Fill all 4 seats before starting.';render();return;}
   initGame(players.map(p=>p.name));
 };
 window.backToMenu=function(){initMenu();};
 window.moveSeat=function(i,dir){
+  if(G.roomCode){
+    socket.emit("moveSeatInRoom",{roomCode:G.roomCode,seatIndex:i,direction:dir});
+    return;
+  }
   const players=[...(G.roomPlayers||defaultRoomPlayers())];
   const j=i+dir;
   if(j<0||j>=players.length)return;
@@ -995,6 +1034,12 @@ window.moveSeat=function(i,dir){
   G.roomPlayers=players;G.roomMsg='Seats updated.';render();
 };
 window.addBotToSeat=function(i){
+  if(G.roomCode){
+    // Online mode: tell server to add a bot; server will broadcast roomUpdated
+    socket.emit("addBotToRoom",{roomCode:G.roomCode});
+    return;
+  }
+  // Local mode
   const players=[...(G.roomPlayers||defaultRoomPlayers())];
   if(players[i])return;
   const botNum=players.filter(p=>p&&p.type==='bot').length+1;
@@ -1009,11 +1054,19 @@ window.addPlayerToSeat=function(i){
   G.roomPlayers=players;G.roomMsg=`Player joined slot ${i+1}.`;render();
 };
 window.addNextBot=function(){
+  if(G.roomCode){
+    socket.emit("addBotToRoom",{roomCode:G.roomCode});
+    return;
+  }
   const players=[...(G.roomPlayers||defaultRoomPlayers())];
   const idx=players.findIndex(p=>!p);
   if(idx>=0){G.roomPlayers=players;addBotToSeat(idx);}
 };
 window.removeSeat=function(i){
+  if(G.roomCode){
+    socket.emit("removeSeatFromRoom",{roomCode:G.roomCode,seatIndex:i});
+    return;
+  }
   const players=[...(G.roomPlayers||defaultRoomPlayers())];
   if(players[i]&&players[i].type!=='host'){
     players[i]=null;G.roomPlayers=players;G.roomMsg=`Slot ${i+1} is open.`;render();
@@ -1043,13 +1096,9 @@ window.createOnlineRoom = function () {
 };
 
 window.joinOnlineRoom = function () {
-  const roomCode = prompt("Enter room code:");
-  if (!roomCode) return;
-
-  const name = prompt("Enter your name:") || "Player";
-
-  socket.emit("joinRoom", {
-    roomCode: roomCode.trim().toUpperCase(),
-    name
-  });
+  // Navigate to the join-room input screen
+  G.roomMode = 'join';
+  G.joinCode = '';
+  G.roomMsg = '';
+  render();
 };
