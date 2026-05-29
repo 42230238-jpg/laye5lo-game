@@ -21,8 +21,21 @@ const io = new Server(server, {
 
 const rooms = {};
 
+function normalizeRoomCode(roomCode) {
+  return String(roomCode || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
 function makeRoomCode() {
-  return Math.random().toString(36).substring(2, 7).toUpperCase();
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+
+  return code;
 }
 
 io.on("connection", (socket) => {
@@ -46,7 +59,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoom", ({ roomCode, name }) => {
-    roomCode = String(roomCode || "").toUpperCase();
+    roomCode = normalizeRoomCode(roomCode);
+console.log("Join attempt:", roomCode);
+console.log("Existing rooms:", Object.keys(rooms));
 
     if (!rooms[roomCode]) {
       socket.emit("joinError", "Room not found.");
