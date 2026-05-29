@@ -1,3 +1,27 @@
+const BACKEND_URL = "https://laye5lo-game.onrender.com";
+const socket = io(BACKEND_URL);
+
+socket.on("connect", () => {
+  console.log("Connected to multiplayer server:", socket.id);
+});
+
+socket.on("disconnect", () => {
+  console.log("Disconnected from multiplayer server");
+});
+
+socket.on("roomCreated", (data) => {
+  console.log("Room created:", data);
+  alert("Room created! Code: " + data.roomCode);
+});
+
+socket.on("roomUpdated", (data) => {
+  console.log("Room updated:", data);
+  alert("Room updated. Players: " + data.players.length);
+});
+
+socket.on("joinError", (message) => {
+  alert(message);
+});
 const COLOR_ORDER=['red','blue','green','yellow'];
 const STRENGTH={'1':13,'skip':12,'draw2':11,'reverse':10,'0':9,'9':8,'8':7,'7':6,'6':5,'5':4,'4':3,'3':2,'2':1};
 const COLOR_CLASS={red:'cr',blue:'cb',green:'cg',yellow:'cy'};
@@ -553,6 +577,8 @@ function buildHTML(){
     <div id="my-hand">${handHTML}</div>
     <div style="display:flex;gap:8px;margin-top:4px">
       <button class="chip-btn" onclick="showRules()">Rules</button>
+<button class="chip-btn gold" onclick="createOnlineRoom()">Create Room</button>
+<button class="chip-btn" onclick="joinOnlineRoom()">Join Room</button>
     </div>
   </div>
 
@@ -980,3 +1006,18 @@ function newRound(){
 }
 
 initMenu();
+window.createOnlineRoom = function () {
+  socket.emit("createRoom");
+};
+
+window.joinOnlineRoom = function () {
+  const roomCode = prompt("Enter room code:");
+  if (!roomCode) return;
+
+  const name = prompt("Enter your name:") || "Player";
+
+  socket.emit("joinRoom", {
+    roomCode: roomCode.trim().toUpperCase(),
+    name
+  });
+};
