@@ -346,13 +346,13 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 #my-hand{
   width:100%;
   max-width:100%;
-  min-height:128px;
+  min-height:170px;
   display:flex;
   justify-content:flex-start;
   align-items:flex-end;
   flex-wrap:nowrap;
   gap:5px;
-  padding:36px 12px 12px;
+  padding:50px 12px 12px;
   overflow-x:auto;
   overflow-y:hidden;
   scroll-padding-inline:12px;
