@@ -97,11 +97,17 @@ function applyGifts(game) {
     const giftIds = new Set(gs[i].map(c => c.id));
     nh[i] = nh[i].filter(c => !giftIds.has(c.id));
   }
-  // Add gifted cards to each receiver
+  // Add gifted cards to each receiver; track which IDs each seat received
+  const received = [[], [], [], []];
   for (let i = 0; i < 4; i++) {
-    gs[i].forEach(c => nh[(i + 1) % 4].push(c));
+    const receiver = (i + 1) % 4;
+    gs[i].forEach(c => {
+      nh[receiver].push(c);
+      received[receiver].push(c.id);
+    });
   }
   game.hands = nh.map(sortHand);
+  game.receivedGiftCardIdsBySeat = received;
 }
 
 function dealGame(playerNames) {
@@ -449,36 +455,52 @@ function playCardForSeat(roomCode, seatIndex, cardId) {
       : `${game.playerNames[wi]} wins trick${trickPts > 0 ? ` (+${trickPts}pts)` : ''}`;
 
     game.statusMsg = msg;
+    game.trickResolving = true;  // freeze: table stays visible for 1.5s
     console.log(`Room ${roomCode}: trick won by seat ${wi} — ${msg}`);
 
-    // Clear table and prepare next trick (or end round)
-    game.table = [];
-    game.leadColor = null;
+    // Broadcast with table still visible + trickResolving=true so clients freeze input
+    broadcastGameState(roomCode);
 
-    const roundOver = leesOnTable === 2 || game.hands.every(h => h.length === 0);
+    // After 1.5s: clear table and continue
+    setTimeout(() => {
+      const room2 = rooms[roomCode];
+      if (!room2 || !room2.game) return;
+      const g = room2.game;
+      g.trickResolving = false;
+      g.receivedGiftCardIdsBySeat = null;  // no longer needed after trick
 
-    if (roundOver) {
-      // Tally round scores
-      game.scores = game.scores.map((s, i) => s + (game.roundPts[i] || 0));
-      const maxScore = Math.max(...game.scores);
-      const gameOver = maxScore >= 101;
+      const tableCards = [...g.table];
+      g.table = [];
+      g.leadColor = null;
 
-      game.phase = gameOver ? 'gameEnd' : 'roundEnd';
-      game.modal = {
-        type: gameOver ? 'gameEnd' : 'roundEnd',
-        rp: [...game.roundPts],
-        sc: [...game.scores]
-      };
-      game.roundPts = [0, 0, 0, 0];
-      console.log(`Room ${roomCode}: round over — scores: ${game.scores}`);
+      const roundOver = leesOnTable === 2 || g.hands.every(h => h.length === 0);
 
+      if (roundOver) {
+        g.scores = g.scores.map((sc, i) => sc + (g.roundPts[i] || 0));
+        const maxScore = Math.max(...g.scores);
+        const gameOver = maxScore >= 101;
+        g.phase = gameOver ? 'gameEnd' : 'roundEnd';
+        g.modal = {
+          type: gameOver ? 'gameEnd' : 'roundEnd',
+          rp: [...g.roundPts],
+          sc: [...g.scores]
+        };
+        g.roundPts = [0, 0, 0, 0];
+        console.log(`Room ${roomCode}: round over — scores: ${g.scores}`);
+        broadcastGameState(roomCode);
+        return;
+      }
+
+      g.currentPlayer = wi;
+      g.statusMsg = `${g.playerNames[wi]}'s turn`;
       broadcastGameState(roomCode);
-      return true;   // no bot scheduling after round end
-    }
 
-    // Next trick starts with the winner
-    game.currentPlayer = wi;
-    game.statusMsg = `${game.playerNames[wi]}'s turn`;
+      if (isBotSeat(room2, wi)) {
+        setTimeout(() => scheduleBotPlay(roomCode), 750);
+      }
+    }, 1500);
+
+    return true;  // done — delayed continuation handles the rest
 
   } else {
     // Trick still in progress — advance to next seat
@@ -527,11 +549,70 @@ function scheduleBotPlay(roomCode) {
 
     const game = room.game;
     if (game.phase !== 'play') { socket.emit("lobbyError", "Game is not in play phase."); return; }
+    if (game.trickResolving) { socket.emit("lobbyError", "Trick is resolving, please wait."); return; }
     if (game.currentPlayer !== seatIndex) { socket.emit("lobbyError", "It is not your turn."); return; }
 
     const ok = playCardForSeat(roomCode, seatIndex, cardId);
     if (!ok) socket.emit("lobbyError", "Invalid card or move.");
     // broadcastGameState is called inside playCardForSeat
+  });
+
+  // ── START NEXT ROUND ──────────────────────────────────────
+  socket.on("startNextRound", ({ roomCode }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+
+    if (!room) { socket.emit("lobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("lobbyError", "Only the host can start the next round."); return; }
+    if (!room.game) { socket.emit("lobbyError", "No game in progress."); return; }
+
+    const game = room.game;
+    if (game.phase !== 'roundEnd' && game.phase !== 'gameEnd') {
+      socket.emit("lobbyError", "Round is not over yet."); return;
+    }
+
+    // Deal a fresh deck, preserve names + cumulative scores
+    const deck = shuffle(buildDeck());
+    const hands = [[], [], [], []];
+    deck.forEach((c, i) => hands[i % 4].push(c));
+
+    room.game = {
+      phase: 'gift',
+      playerNames: [...game.playerNames],
+      hands: hands.map(sortHand),
+      gifts: [null, null, null, null],
+      table: [],
+      currentPlayer: 0,
+      leadColor: null,
+      scores: [...game.scores],   // keep cumulative scores
+      roundPts: [0, 0, 0, 0],
+      selected: [],
+      statusMsg: `Choose 3 cards to gift to ${game.playerNames[1]}`,
+      botThought: '',
+      playedCards: [],
+      knownGiftedLees: [],
+      modal: null,
+      trickResolving: false,
+      receivedGiftCardIdsBySeat: null,
+    };
+
+    console.log(`Room ${roomCode}: host started next round — fresh deck dealt`);
+    broadcastGameState(roomCode);
+
+    // Kick off bot gifts if needed
+    room.seats.forEach((seat, idx) => {
+      if (seat && seat.type === 'bot') {
+        room.game.gifts[idx] = chooseSimpleGift(room.game.hands[idx]);
+      }
+    });
+    // If all bots (shouldn't happen in a real game but just in case)
+    if (room.game.gifts.every(Boolean)) {
+      applyGifts(room.game);
+      room.game.phase = 'play';
+      room.game.currentPlayer = 0;
+      room.game.statusMsg = `${room.game.playerNames[0]}'s turn`;
+      broadcastGameState(roomCode);
+    }
   });
 
   // ── DISCONNECT ────────────────────────────────────────────

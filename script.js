@@ -73,7 +73,16 @@ socket.on("gameState", (data) => {
   console.log("Game state update — phase:", data.gameState.phase, "seat", data.mySeatIndex);
   const gs = data.gameState;
   const wasGift = G.phase === 'gift';
+  const wasRoundEnd = G.phase === 'roundEnd' || G.phase === 'gameEnd';
   const nowPlay = gs.phase === 'play';
+  const nowGift = gs.phase === 'gift';
+
+  // Host clicked Next Round — everyone enters fresh gift phase
+  if (wasRoundEnd && nowGift) {
+    stopTimer();
+    giftedIds = new Set();
+    resolving = false;
+  }
 
   playerNames = [...gs.playerNames];
   mySeatIndex = data.mySeatIndex;
@@ -89,10 +98,14 @@ socket.on("gameState", (data) => {
   // When transitioning gift→play, highlight the incoming gift cards for this seat
   if (wasGift && nowPlay) {
     resolving = false;
-    giftedIds = new Set();
     stopTimer();
-    // The server handed us updated hands; we can't easily know which are new,
-    // so skip glow for online (local Quick Play still does it via doGifts)
+    // Server now tells us exactly which card IDs this seat received as gifts
+    if (gs.receivedGiftCardIdsBySeat && gs.receivedGiftCardIdsBySeat[data.mySeatIndex]) {
+      giftedIds = new Set(gs.receivedGiftCardIdsBySeat[data.mySeatIndex]);
+      setTimeout(() => { giftedIds = new Set(); render(); }, 3000);
+    } else {
+      giftedIds = new Set();
+    }
     if (G.currentPlayer === mySeatIndex) startTimer();
   }
 
@@ -850,7 +863,14 @@ function buildModal(){
     ${isEnd?`<div style="color:#ff6666;font-size:12px;text-align:center;margin-bottom:8px">${names[loserIdx]} reached 101+!</div>`:''}
     <div class="modal-rows">${rows}</div>
     <div style="display:flex;justify-content:center;margin-top:12px">
-      ${isEnd?`<button class="chip-btn gold" onclick="newGame()">New Game</button>`:`<button class="chip-btn gold" onclick="nextRound()">Next Round</button>`}
+      ${isEnd
+        ? `<button class="chip-btn gold" onclick="newGame()">New Game</button>`
+        : G.roomCode
+          ? (G.isHost
+              ? `<button class="chip-btn gold" onclick="hostNextRound()">Next Round →</button>`
+              : `<div style="font-size:12px;color:rgba(255,255,255,0.5);padding:6px 0">Waiting for host to start next round…</div>`)
+          : `<button class="chip-btn gold" onclick="nextRound()">Next Round</button>`
+      }
     </div>
   </div></div>`;
 }
@@ -868,7 +888,7 @@ function attachEvents(){
   });
   document.querySelectorAll('[data-play]').forEach(el=>{
     el.addEventListener('click',()=>{
-      if(G.currentPlayer!==mySeatIndex||resolving)return;
+      if(G.currentPlayer!==mySeatIndex||resolving||G.trickResolving)return;
       const id=el.dataset.play;
       const card=G.hands[mySeatIndex].find(c=>c.id===id);
       if(!card)return;
@@ -1106,6 +1126,12 @@ window.confirmGift=function(){
   G.gifts[0]=[...G.selected];setTimeout(doGifts,300);
 };
 window.nextRound=function(){G.modal=null;newRound();};
+window.hostNextRound=function(){
+  if(!G.roomCode)return;
+  socket.emit('startNextRound',{roomCode:G.roomCode});
+  G.modal=null;
+  render();
+};
 window.newGame=function(){initGame();};
 window.showRules=function(){G.modal={type:'rules'};render();};
 window.closeModal=function(){G.modal=null;render();};
