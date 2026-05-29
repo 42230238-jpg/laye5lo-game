@@ -46,9 +46,25 @@ socket.on("roomUpdated", (data) => {
   render();
 });
 
-socket.on("roomStarted", (data) => {
-  console.log("Room started:", data);
-  initGame(data.playerNames);
+socket.on("gameStarted", (data) => {
+  console.log("Game started — applying server game state:", data.roomCode);
+  const gs = data.gameState;
+
+  // Apply the server-dealt state directly — no local shuffle
+  playerNames = [...gs.playerNames];
+  nextRoundStarter = 0;
+  resolving = false;
+  giftedIds = new Set();
+  stopTimer();
+
+  G = {
+    ...gs,
+    // Preserve online room identity so we can still tell we're in an online game
+    roomCode: data.roomCode,
+    isHost: G.isHost  // keep whatever role this client had
+  };
+
+  render();
 });
 
 socket.on("lobbyError", (message) => {

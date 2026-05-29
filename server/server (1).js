@@ -21,6 +21,59 @@ const io = new Server(server, {
 
 const rooms = {};
 
+// ── CARD HELPERS (mirrored from script.js) ───────────────
+const COLOR_ORDER = ['red', 'blue', 'green', 'yellow'];
+const STRENGTH = { '1': 13, 'skip': 12, 'draw2': 11, 'reverse': 10, '0': 9, '9': 8, '8': 7, '7': 6, '6': 5, '5': 4, '4': 3, '3': 2, '2': 1 };
+
+function buildDeck() {
+  const d = [];
+  COLOR_ORDER.forEach(col =>
+    ['0','1','2','3','4','5','6','7','8','9','skip','draw2','reverse'].forEach(t =>
+      d.push({ color: col, type: t, id: `${col}-${t}` })
+    )
+  );
+  return d;
+}
+
+function shuffle(a) {
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
+
+function sortHand(h) {
+  return [...h].sort((a, b) => {
+    const ci = COLOR_ORDER.indexOf(a.color) - COLOR_ORDER.indexOf(b.color);
+    return ci || (STRENGTH[b.type] || 0) - (STRENGTH[a.type] || 0);
+  });
+}
+
+function dealGame(playerNames) {
+  const deck = shuffle(buildDeck());
+  const hands = [[], [], [], []];
+  deck.forEach((c, i) => hands[i % 4].push(c));
+  return {
+    phase: 'gift',
+    playerNames,
+    hands: hands.map(sortHand),
+    gifts: [null, null, null, null],
+    table: [],
+    currentPlayer: 0,
+    leadColor: null,
+    scores: [0, 0, 0, 0],
+    roundPts: [0, 0, 0, 0],
+    selected: [],
+    statusMsg: `Choose 3 cards to gift to ${playerNames[1]}`,
+    botThought: '',
+    playedCards: [],
+    knownGiftedLees: [],
+    modal: null
+  };
+}
+
 function normalizeRoomCode(roomCode) {
   return String(roomCode || "")
     .toUpperCase()
@@ -168,8 +221,11 @@ io.on("connection", (socket) => {
     if (filled < 4) { socket.emit("lobbyError", "All 4 seats must be filled before starting."); return; }
 
     const playerNames = room.seats.map(s => s.name);
-    io.to(roomCode).emit("roomStarted", { roomCode, playerNames });
-    console.log("Room", roomCode, "started with players:", playerNames);
+    const gameState = dealGame(playerNames);
+    room.game = gameState;
+
+    io.to(roomCode).emit("gameStarted", { roomCode, gameState });
+    console.log("Room", roomCode, "game started — deck dealt server-side. Players:", playerNames);
   });
 
   // ── DISCONNECT ────────────────────────────────────────────
