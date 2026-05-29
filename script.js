@@ -608,17 +608,28 @@ function buildHTML(){
   const playableIds = new Set((isMyTurn ? getPlayable(mySeatIndex) : []).map(c => c.id));
   const selIds = new Set(G.selected.map(c => c.id));
 
-  // TABLE CENTER CARDS
-  const rots=[5,-5,10,-10];
-  const tableCards=G.table.length===0
-    ?`<span style="font-size:12px;color:rgba(255,255,255,0.4)">Waiting for first card...</span>`
-    :G.table.map((t,i)=>{
-        const offsuit=G.leadColor&&t.card.color!==G.leadColor;
-        return `<div class="played-slot">
-          <span class="played-name">${pname(t.pi)}${offsuit?' *':''}</span>
-          <div class="table-card" style="transform:rotate(${(i-1.5)*4}deg)">${cardEl(t.card,{offsuit})}</div>
-        </div>`;
-      }).join('');
+  // TABLE CENTER CARDS — diamond layout by relative seat position
+  // relPos: 0=bottom(me), 1=right, 2=top(opposite), 3=left
+  const slotClass  = ['slot-bottom','slot-right','slot-top','slot-left'];
+  const slotRot    = [0, 6, 0, -6];  // subtle rotations per slot
+
+  let tableCards;
+  if(G.table.length===0){
+    tableCards=`<div class="table-played-empty">Waiting for first card...</div>`;
+  } else {
+    const slots={};
+    G.table.forEach(t=>{
+      // Convert absolute seat index → relative visual position from this client's POV
+      const relPos=(t.pi - mySeatIndex + 4)%4;
+      const offsuit=G.leadColor&&t.card.color!==G.leadColor;
+      const rot=slotRot[relPos];
+      slots[relPos]=`<div class="played-slot ${slotClass[relPos]}">
+        <span class="played-name">${pname(t.pi)}${offsuit?' ✦':''}</span>
+        <div class="table-card" style="transform:rotate(${rot}deg)">${cardEl(t.card,{offsuit})}</div>
+      </div>`;
+    });
+    tableCards=Object.values(slots).join('');
+  }
 
   // MY HAND — fan slightly
   const myHand=G.hands[mySeatIndex];
@@ -685,10 +696,11 @@ function buildHTML(){
     </div>
   </div>
 
-  <!-- CENTER: table -->
+  <!-- CENTER: table — diamond layout -->
   <div class="tz-mid">
     ${G.leadColor?`<div class="lead-chip">Lead: ${G.leadColor}</div>`:''}
-    <div class="table-played">${tableCards}</div>
+    <div class="table-played">${G.table.length===0?'':tableCards}</div>
+    ${G.table.length===0?`<div class="table-played-empty">Waiting for first card...</div>`:''}
     <div class="status-bar">${G.statusMsg}</div>
     ${G.botThought?`<div class="thought-chip">${G.botThought}</div>`:''}
   </div>
