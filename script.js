@@ -47,11 +47,11 @@ socket.on("roomUpdated", (data) => {
 });
 
 socket.on("gameStarted", (data) => {
-  console.log("Game started — applying server game state:", data.roomCode);
+  console.log("Game started — seat", data.mySeatIndex, "room", data.roomCode);
   const gs = data.gameState;
 
-  // Apply the server-dealt state directly — no local shuffle
   playerNames = [...gs.playerNames];
+  mySeatIndex = data.mySeatIndex;   // THIS client's seat in the 4-player layout
   nextRoundStarter = 0;
   resolving = false;
   giftedIds = new Set();
@@ -59,9 +59,25 @@ socket.on("gameStarted", (data) => {
 
   G = {
     ...gs,
-    // Preserve online room identity so we can still tell we're in an online game
     roomCode: data.roomCode,
-    isHost: G.isHost  // keep whatever role this client had
+    isHost: G.isHost
+  };
+
+  render();
+});
+
+// Live game state pushed after any playCard (same shape as gameStarted payload)
+socket.on("gameState", (data) => {
+  console.log("Game state update — seat", data.mySeatIndex, "room", data.roomCode);
+  const gs = data.gameState;
+
+  playerNames = [...gs.playerNames];
+  mySeatIndex = data.mySeatIndex;
+
+  G = {
+    ...gs,
+    roomCode: data.roomCode,
+    isHost: G.isHost
   };
 
   render();
@@ -208,6 +224,7 @@ function hasNextTrickPlayer(p){
 }
 
 let G={phase:'menu',modal:null,roomCode:null,roomMsg:''};
+let mySeatIndex=0;        // which seat this client occupies; 0 for local Quick Play
 let resolving=false;
 let turnTimer=null;       // interval id for countdown
 let turnTimeLeft=20;      // seconds remaining
@@ -218,6 +235,7 @@ let botDifficulty='easy';
 
 function initMenu(){
   stopTimer();
+  mySeatIndex=0;
   G={phase:'menu',modal:null,roomCode:null,roomMsg:''};
   resolving=false;giftedIds=new Set();render();
 }
@@ -259,7 +277,7 @@ function executePlay(pi,card,reason=''){
   } else {
     G.currentPlayer=nextTrickP(G.currentPlayer);
     setStatus();render();
-    if(G.currentPlayer===0){startTimer();}
+    if(G.currentPlayer===mySeatIndex){startTimer();}
     else{setTimeout(aiPlay,680);}
   }
 }
@@ -464,12 +482,12 @@ function finishTrick(){
   if(leeCount===2){endRound();return;}
   if(G.hands.every(h=>h.length===0)){endRound();return;}
   G.currentPlayer=G.hands[wi].length>0?wi:nextActiveP(wi);setStatus();render();
-  if(G.currentPlayer===0){startTimer();}
+  if(G.currentPlayer===mySeatIndex){startTimer();}
   else{setTimeout(aiPlay,720);}
 }
 function pname(i){return playerNames[i]||DEFAULT_NAMES[i];}
 function setStatus(){
-  G.statusMsg=G.currentPlayer===0?`Your turn!${G.leadColor?' - follow '+G.leadColor:''}`:pname(G.currentPlayer)+' is playing...';
+  G.statusMsg=G.currentPlayer===mySeatIndex?`Your turn!${G.leadColor?' - follow '+G.leadColor:''}`:pname(G.currentPlayer)+' is playing...';
 }
 function endRound(){
   G.scores=G.scores.map((s,i)=>s+G.roundPts[i]);
@@ -504,7 +522,8 @@ function doGifts(){
 }
 
 function aiPlay(){
-  if(G.phase!=='play'||G.currentPlayer===0||resolving)return;
+  if(G.roomCode)return;  // online: server drives turns, no local bots
+  if(G.phase!=='play'||G.currentPlayer===mySeatIndex||resolving)return;
   const idx=G.currentPlayer,pl=getPlayable(idx);
   const choice=botDifficulty==='easy'?pickEasyCard(pl):pickSmartCard(idx,pl,botDifficulty);
   if(botDifficulty==='hard')G.statusMsg=`${pname(idx)}: ${choice.reason}.`;
@@ -551,9 +570,14 @@ function buildHTML(){
   if(G.phase==='roomLobby')return buildRoomLobbyHTML()+modal;
   if(G.phase==='gift')return buildGiftHTML()+modal;
 
-  const isMyTurn=G.currentPlayer===0&&!resolving&&G.phase==='play';
-  const playableIds=new Set((isMyTurn?getPlayable(0):[]).map(c=>c.id));
-  const selIds=new Set(G.selected.map(c=>c.id));
+  // rel(n): seat index at position n steps clockwise from my seat
+  // bottom=me(0), right=+1, top=+2, left=+3
+  const rel = n => (mySeatIndex + n) % 4;
+
+  const isOnline = !!G.roomCode;
+  const isMyTurn = G.currentPlayer === mySeatIndex && !resolving && G.phase === 'play';
+  const playableIds = new Set((isMyTurn ? getPlayable(mySeatIndex) : []).map(c => c.id));
+  const selIds = new Set(G.selected.map(c => c.id));
 
   // TABLE CENTER CARDS
   const rots=[5,-5,10,-10];
@@ -568,7 +592,7 @@ function buildHTML(){
       }).join('');
 
   // MY HAND — fan slightly
-  const myHand=G.hands[0];
+  const myHand=G.hands[mySeatIndex];
   const n=myHand.length;
   const handHTML=myHand.map((c,i)=>{
     const offset=n>1?(i/(n-1)-0.5)*Math.min(n*2,24):0;
@@ -587,33 +611,47 @@ function buildHTML(){
     return `<div class="avatar${active?' active':''}">${letter}</div>`;
   };
 
-  // timer ring (shown only on player's turn)
-  const isMyTurnNow=G.currentPlayer===0&&!resolving&&G.phase==='play';
+  // timer ring shown only on this client's turn
+  const isMyTurnNow=G.currentPlayer===mySeatIndex&&!resolving&&G.phase==='play';
   const myTimerId=isMyTurnNow?' id="turn-timer-ring"':'';
   const myTimerClass=isMyTurnNow?' timer-ring':'';
+
+  // Seat references relative to this client's perspective
+  const topSeat  = rel(2);   // opposite
+  const leftSeat = rel(3);   // to my left
+  const rightSeat= rel(1);   // to my right
+  const meSeat   = mySeatIndex;
+
+  // Avatar letter: host=H, real players use first letter of name, bots=B+num
+  const avatarLabel = i => {
+    const n = pname(i);
+    if (i === 0 && mySeatIndex === 0) return 'You';
+    if (i === mySeatIndex) return 'You';
+    return n.startsWith('Bot') ? n.replace('Bot ','B') : n.charAt(0).toUpperCase();
+  };
 
   return `
 <button class="back-arrow" onclick="backToMenu()" aria-label="Back to menu">&lsaquo;</button>
 <div id="table-wrap">
 
-  <!-- TOP: Bot 2 -->
+  <!-- TOP: seat opposite me -->
   <div class="tz-top2">
     <div class="player-zone">
-      ${av(2,'B2')}
-      <span class="pname">${pname(2)}</span>
-      <span class="pscore">${G.scores[2]}pts</span>
-      <div style="display:flex;margin-top:2px;width:120px;justify-content:center;overflow:hidden">${miniBackCards(G.hands[2].length)}</div>
+      ${av(topSeat, avatarLabel(topSeat))}
+      <span class="pname">${pname(topSeat)}</span>
+      <span class="pscore">${G.scores[topSeat]}pts</span>
+      <div style="display:flex;margin-top:2px;width:120px;justify-content:center;overflow:hidden">${miniBackCards(G.hands[topSeat].length)}</div>
     </div>
   </div>
 
-  <!-- LEFT: Bot 3 -->
+  <!-- LEFT: seat to my left -->
   <div class="tz-left">
     <div class="player-zone">
-      ${av(3,'B3')}
-      <span class="pname">${pname(3)}</span>
-      <span class="pscore">${G.scores[3]}pts</span>
+      ${av(leftSeat, avatarLabel(leftSeat))}
+      <span class="pname">${pname(leftSeat)}</span>
+      <span class="pscore">${G.scores[leftSeat]}pts</span>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:2px;min-height:80px">
-        ${Array(Math.min(G.hands[3].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
+        ${Array(Math.min(G.hands[leftSeat].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
       </div>
     </div>
   </div>
@@ -626,14 +664,14 @@ function buildHTML(){
     ${G.botThought?`<div class="thought-chip">${G.botThought}</div>`:''}
   </div>
 
-  <!-- RIGHT: Bot 1 -->
+  <!-- RIGHT: seat to my right -->
   <div class="tz-right">
     <div class="player-zone">
-      ${av(1,'B1')}
-      <span class="pname">${pname(1)}</span>
-      <span class="pscore">${G.scores[1]}pts</span>
+      ${av(rightSeat, avatarLabel(rightSeat))}
+      <span class="pname">${pname(rightSeat)}</span>
+      <span class="pscore">${G.scores[rightSeat]}pts</span>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:2px;min-height:80px">
-        ${Array(Math.min(G.hands[1].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
+        ${Array(Math.min(G.hands[rightSeat].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
       </div>
     </div>
   </div>
@@ -641,17 +679,17 @@ function buildHTML(){
   <!-- BOTTOM: My area -->
   <div class="tz-btm">
     <div class="my-info">
-      ${av(0,'You')}
+      ${av(meSeat, 'You')}
       <div class="my-name-ring${myTimerClass}"${myTimerId}>
-        <span class="pname">${pname(0)}</span>
-        <span class="pscore">${G.scores[0]}pts</span>
+        <span class="pname">${pname(meSeat)}</span>
+        <span class="pscore">${G.scores[meSeat]}pts</span>
       </div>
     </div>
     <div id="my-hand">${handHTML}</div>
     <div style="display:flex;gap:8px;margin-top:4px">
       <button class="chip-btn" onclick="showRules()">Rules</button>
-<button class="chip-btn gold" onclick="createOnlineRoom()">Create Room</button>
-<button class="chip-btn" onclick="joinOnlineRoom()">Join Room</button>
+      ${!isOnline?`<button class="chip-btn gold" onclick="createOnlineRoom()">Create Room</button>
+<button class="chip-btn" onclick="joinOnlineRoom()">Join Room</button>`:''}
     </div>
   </div>
 
@@ -662,8 +700,21 @@ ${modal}`;
 
 // ── GIFT PHASE ────────────────────────────────────────────
 function buildGiftHTML(){
+  // Relative seat helper — same as play phase
+  const rel = n => (mySeatIndex + n) % 4;
+  const topSeat  = rel(2);
+  const leftSeat = rel(3);
+  const rightSeat= rel(1);
+  const meSeat   = mySeatIndex;
+
+  const avatarLabel = i => {
+    if (i === mySeatIndex) return 'You';
+    const n = pname(i);
+    return n.startsWith('Bot') ? n.replace('Bot ','B') : n.charAt(0).toUpperCase();
+  };
+
   const selSet=new Set(G.selected.map(c=>c.id));
-  const hand=G.hands[0];
+  const hand=G.hands[mySeatIndex];
   const violation=G.selected.length>0&&giftViolatesColor(hand,G.selected);
   const n=hand.length;
   const handHTML=hand.map((c,i)=>{
@@ -684,28 +735,31 @@ function buildGiftHTML(){
     </div>`;
   }).join('');
 
+  // Gift goes to the player to my right (seat+1)
+  const giftTargetName = pname(rightSeat);
+
   return `
 <button class="back-arrow" onclick="backToMenu()" aria-label="Back to menu">&lsaquo;</button>
 <div id="table-wrap">
 
-  <!-- TOP: Bot 2 -->
+  <!-- TOP: seat opposite me -->
   <div class="tz-top2">
     <div class="player-zone">
-      <div class="avatar">B2</div>
-      <span class="pname">${pname(2)}</span>
-      <span class="pscore">${G.scores[2]}pts</span>
-      <div style="display:flex;margin-top:2px;width:120px;justify-content:center;overflow:hidden">${miniBackCards(G.hands[2].length)}</div>
+      <div class="avatar">${avatarLabel(topSeat)}</div>
+      <span class="pname">${pname(topSeat)}</span>
+      <span class="pscore">${G.scores[topSeat]}pts</span>
+      <div style="display:flex;margin-top:2px;width:120px;justify-content:center;overflow:hidden">${miniBackCards(G.hands[topSeat].length)}</div>
     </div>
   </div>
 
-  <!-- LEFT: Bot 3 -->
+  <!-- LEFT: seat to my left -->
   <div class="tz-left">
     <div class="player-zone">
-      <div class="avatar">B3</div>
-      <span class="pname">${pname(3)}</span>
-      <span class="pscore">${G.scores[3]}pts</span>
+      <div class="avatar">${avatarLabel(leftSeat)}</div>
+      <span class="pname">${pname(leftSeat)}</span>
+      <span class="pscore">${G.scores[leftSeat]}pts</span>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:2px;min-height:80px">
-        ${Array(Math.min(G.hands[3].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
+        ${Array(Math.min(G.hands[leftSeat].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
       </div>
     </div>
   </div>
@@ -713,20 +767,20 @@ function buildGiftHTML(){
   <!-- CENTER: gift instructions -->
   <div class="tz-mid">
     <div style="background:rgba(0,0,0,0.4);border-radius:14px;padding:10px 20px;text-align:center;border:1px solid rgba(255,255,255,0.1)">
-      <div style="color:rgba(255,220,100,0.9);font-size:13px;font-weight:600">Gift 3 cards to ${pname(1)}</div>
+      <div style="color:rgba(255,220,100,0.9);font-size:13px;font-weight:600">Gift 3 cards to ${giftTargetName}</div>
       <div style="color:rgba(255,255,255,0.6);font-size:11px;margin-top:2px">${G.selected.length}/3 selected</div>
       ${violation?`<div class="warn-chip" style="margin-top:6px">Warning: Holding Lee5a - can't empty a color</div>`:''}
     </div>
   </div>
 
-  <!-- RIGHT: Bot 1 -->
+  <!-- RIGHT: seat to my right -->
   <div class="tz-right">
     <div class="player-zone">
-      <div class="avatar">B1</div>
-      <span class="pname">${pname(1)}</span>
-      <span class="pscore">${G.scores[1]}pts</span>
+      <div class="avatar">${avatarLabel(rightSeat)}</div>
+      <span class="pname">${pname(rightSeat)}</span>
+      <span class="pscore">${G.scores[rightSeat]}pts</span>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:2px;min-height:80px">
-        ${Array(Math.min(G.hands[1].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
+        ${Array(Math.min(G.hands[rightSeat].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
       </div>
     </div>
   </div>
@@ -735,8 +789,8 @@ function buildGiftHTML(){
   <div class="tz-btm">
     <div class="my-info">
       <div class="avatar">You</div>
-      <span class="pname">${pname(0)}</span>
-      <span class="pscore">${G.scores[0]}pts</span>
+      <span class="pname">${pname(meSeat)}</span>
+      <span class="pscore">${G.scores[meSeat]}pts</span>
     </div>
     <div id="my-hand">${handHTML}</div>
     <button class="chip-btn gold" onclick="confirmGift()" ${G.selected.length!==3||violation?'disabled':''}>
@@ -784,7 +838,9 @@ function buildModal(){
 function attachEvents(){
   document.querySelectorAll('[data-gift]').forEach(el=>{
     el.addEventListener('click',()=>{
-      const id=el.dataset.gift,card=G.hands[0].find(c=>c.id===id);if(!card)return;
+      const id=el.dataset.gift;
+      const card=G.hands[mySeatIndex].find(c=>c.id===id);
+      if(!card)return;
       const idx=G.selected.findIndex(c=>c.id===id);
       if(idx>=0)G.selected.splice(idx,1);else if(G.selected.length<3)G.selected.push(card);
       render();
@@ -792,10 +848,19 @@ function attachEvents(){
   });
   document.querySelectorAll('[data-play]').forEach(el=>{
     el.addEventListener('click',()=>{
-      if(G.currentPlayer!==0||resolving)return;
-      const id=el.dataset.play,card=G.hands[0].find(c=>c.id===id);if(!card)return;
-      if(!getPlayable(0).find(c=>c.id===card.id))return;
-      executePlay(0,card);
+      if(G.currentPlayer!==mySeatIndex||resolving)return;
+      const id=el.dataset.play;
+      const card=G.hands[mySeatIndex].find(c=>c.id===id);
+      if(!card)return;
+      if(!getPlayable(mySeatIndex).find(c=>c.id===card.id))return;
+
+      if(G.roomCode){
+        // Online: send to server; server will broadcast gameState to everyone
+        socket.emit('playCard',{roomCode:G.roomCode,cardId:id});
+      } else {
+        // Local Quick Play: run the full local engine
+        executePlay(mySeatIndex,card);
+      }
     });
   });
 }
@@ -810,9 +875,15 @@ function startTimer(){
     updateTimerBar();
     if(turnTimeLeft<=0){
       stopTimer();
-      // auto-play: pick first playable card
-      const pl=getPlayable(0);
-      if(pl.length)executePlay(0,pl[0]);
+      // auto-play: pick first playable card for this client's seat
+      const pl=getPlayable(mySeatIndex);
+      if(pl.length){
+        if(G.roomCode){
+          socket.emit('playCard',{roomCode:G.roomCode,cardId:pl[0].id});
+        } else {
+          executePlay(mySeatIndex,pl[0]);
+        }
+      }
     }
   },1000);
 }

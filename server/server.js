@@ -224,8 +224,82 @@ io.on("connection", (socket) => {
     const gameState = dealGame(playerNames);
     room.game = gameState;
 
-    io.to(roomCode).emit("gameStarted", { roomCode, gameState });
+    // Send each real player their own seat index; bots have no socket
+    room.seats.forEach((seat, seatIndex) => {
+      if (seat && seat.id) {
+        io.to(seat.id).emit("gameStarted", { roomCode, gameState, mySeatIndex: seatIndex });
+      }
+    });
     console.log("Room", roomCode, "game started — deck dealt server-side. Players:", playerNames);
+  });
+
+  // ── PLAY CARD ─────────────────────────────────────────────
+  socket.on("playCard", ({ roomCode, cardId }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || !room.game) { socket.emit("lobbyError", "Game not found."); return; }
+
+    // Find this socket's seat
+    const seatIndex = room.seats.findIndex(s => s && s.id === socket.id);
+    if (seatIndex === -1) { socket.emit("lobbyError", "You are not in this game."); return; }
+
+    const game = room.game;
+    if (game.currentPlayer !== seatIndex) {
+      socket.emit("lobbyError", "It is not your turn."); return;
+    }
+
+    // Find and validate the card
+    const cardIdx = game.hands[seatIndex].findIndex(c => c.id === cardId);
+    if (cardIdx === -1) { socket.emit("lobbyError", "Card not found in your hand."); return; }
+
+    // Validate lead-color rule (must follow suit if possible, else Lee, else anything)
+    const hand = game.hands[seatIndex];
+    const card = hand[cardIdx];
+    if (game.leadColor) {
+      const hasSuit = hand.some(c => c.color === game.leadColor);
+      const hasLee  = hand.some(c => (c.color==='blue'&&c.type==='draw2')||(c.color==='yellow'&&c.type==='0'));
+      if (hasSuit && card.color !== game.leadColor) {
+        socket.emit("lobbyError", "You must follow the lead color."); return;
+      }
+      if (!hasSuit && hasLee && !((card.color==='blue'&&card.type==='draw2')||(card.color==='yellow'&&card.type==='0'))) {
+        socket.emit("lobbyError", "You must play a Lee5a when you have no lead-color cards."); return;
+      }
+    }
+
+    // Remove from hand, add to table
+    game.hands[seatIndex] = sortHand(hand.filter(c => c.id !== cardId));
+    if (!game.playedCards) game.playedCards = [];
+    game.playedCards.push(card);
+    game.table.push({ pi: seatIndex, card });
+    if (!game.leadColor) game.leadColor = card.color;
+
+    // Check if both lees landed in this trick → round ends immediately
+    const leesOnTable = game.table.filter(t =>
+      (t.card.color==='blue'&&t.card.type==='draw2') ||
+      (t.card.color==='yellow'&&t.card.type==='0')
+    ).length;
+
+    if (leesOnTable === 2 || game.table.length === 4) {
+      // Trick complete — advance to next player (full scoring handled client-side for now)
+      game.trickComplete = true;
+      game.statusMsg = leesOnTable === 2
+        ? 'Both Lee5as taken! Round ends now.'
+        : 'Trick complete...';
+    } else {
+      // Advance to next real player (skip bots — bots are handled client-side for now)
+      let next = (seatIndex + 1) % 4;
+      game.currentPlayer = next;
+      const nextName = game.playerNames[next];
+      game.statusMsg = `${nextName}'s turn`;
+    }
+
+    // Broadcast updated game state to all players with their personal seat index
+    room.seats.forEach((seat, idx) => {
+      if (seat && seat.id) {
+        io.to(seat.id).emit("gameState", { roomCode, gameState: game, mySeatIndex: idx });
+      }
+    });
+    console.log(`Room ${roomCode}: seat ${seatIndex} played ${cardId}`);
   });
 
   // ── DISCONNECT ────────────────────────────────────────────
