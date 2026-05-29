@@ -227,15 +227,10 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 }
 
 /* ── DIAMOND TABLE LAYOUT ── */
-/*
-  Container 240x240. Card = 54x82px.
-  bottom: (240-54)/2 = 93px from left
-  left/right: (240-82)/2 = 79px from top
-*/
 .table-played{
   position:relative;
-  width:300px;
-  height:260px;
+  width:220px;
+  height:220px;
   flex-shrink:0;
 }
 
@@ -245,8 +240,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   display:flex;
   align-items:center;
   justify-content:center;
-  width:300px;
-  height:260px;
+  width:220px;
+  height:220px;
 }
 
 .played-slot{
@@ -257,30 +252,49 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   gap:3px;
 }
 
-.slot-top{
-  top:0;
-  left:50%;
-  transform:translateX(-50%);
-}
-
 .slot-bottom{
   bottom:0;
   left:50%;
   transform:translateX(-50%);
+  flex-direction:column-reverse;  /* name below card */
 }
-
+.slot-top{
+  top:0;
+  left:50%;
+  transform:translateX(-50%);
+  flex-direction:column;          /* name above card */
+}
 .slot-left{
-  left:10px;
+  left:0;
   top:50%;
   transform:translateY(-50%);
+  flex-direction:column;
+}
+.slot-right{
+  right:0;
+  top:50%;
+  transform:translateY(-50%);
+  flex-direction:column;
 }
 
-.slot-right{
-  right:10px;
-  top:50%;
-  transform:translateY(-50%);
+.played-name{
+  font-size:9px;
+  color:rgba(255,255,255,0.7);
+  font-weight:600;
+  text-shadow:0 1px 2px rgba(0,0,0,.9);
+  white-space:nowrap;
+  order:-1;
 }
-.table-card{ transition:transform 0.22s ease; }
+
+.slot-bottom .played-name{
+  order:1;
+}
+
+.table-card{
+  transition:transform 0.22s ease;
+  filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6));
+}
+
 .status-bar{
   background:rgba(0,0,0,0.45);
   border-radius:20px;
@@ -324,19 +338,18 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   flex-direction:column;
   align-items:center;
   gap:6px;
-  overflow:visible;
 }
 
 #my-hand{
   width:100%;
   max-width:100%;
-  min-height:120px;
+  min-height:110px;
   display:flex;
   justify-content:flex-start;
   align-items:flex-end;
   flex-wrap:nowrap;
   gap:5px;
-  padding:24px 12px 12px;
+  padding:28px 12px 16px;   /* 28px top = headroom for selected-card lift */
   overflow-x:auto;
   overflow-y:visible;
   scroll-padding-inline:12px;
@@ -982,8 +995,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   align-items:center;
   justify-content:flex-start;
   gap:6px;
-  min-height:180px;
-  padding-bottom:12px;
+  min-height:200px;
+  padding-bottom:20px;
   overflow:visible;
 }
 
@@ -1017,14 +1030,14 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   }
 
   .tz-btm{
-    min-height:150px;
+    min-height:180px;
     gap:4px;
-    padding-bottom:16px;
+    padding-bottom:20px;
   }
 
   #my-hand{
     min-height:100px;
-    padding:4px 14px 14px;
+    padding:22px 14px 16px;
   }
 
   .my-info{
@@ -1048,11 +1061,4 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   #table-wrap .card .csym{
     font-size:8px;
   }
-
-  /* diamond slot offsets for smaller container on mobile */
-  .table-played, .table-played-empty { width:180px; height:180px; }
-  .slot-bottom { left:63px; }   /* (180-54)/2 */
-  .slot-top    { left:63px; }
-  .slot-left   { top:49px; }    /* (180-82)/2 */
-  .slot-right  { top:49px; }
 }
