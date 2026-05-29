@@ -1010,6 +1010,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   min-height:200px;
   padding-bottom:12px;
   overflow:visible;
+  transform:translateY(-40px)
 }
 
 .tz-top2 .player-zone{
