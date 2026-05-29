@@ -234,47 +234,51 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 */
 .table-played{
   position:relative;
-  width:240px;
-  height:240px;
+  width:300px;
+  height:260px;
   flex-shrink:0;
 }
+
 .table-played-empty{
-  width:240px;height:240px;
-  display:flex;align-items:center;justify-content:center;
-  font-size:12px;color:rgba(255,255,255,0.35);
+  font-size:12px;
+  color:rgba(255,255,255,0.4);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:300px;
+  height:260px;
 }
+
 .played-slot{
   position:absolute;
   display:flex;
+  flex-direction:column;
   align-items:center;
   gap:3px;
 }
-.played-name{
-  font-size:9px;font-weight:700;
-  color:rgba(255,255,255,0.8);
-  text-shadow:0 1px 3px rgba(0,0,0,1);
-  white-space:nowrap;line-height:1;
-}
-/* bottom = me */
-.slot-bottom{
-  flex-direction:column;
-  left:93px;bottom:0;
-}
-.slot-bottom .played-name{ order:1; }
-/* top = opposite */
+
 .slot-top{
-  flex-direction:column;
-  left:93px;top:0;
+  top:0;
+  left:50%;
+  transform:translateX(-50%);
 }
-/* left player — name sits to the right of card */
+
+.slot-bottom{
+  bottom:0;
+  left:50%;
+  transform:translateX(-50%);
+}
+
 .slot-left{
-  flex-direction:row;
-  left:0;top:79px;
+  left:10px;
+  top:50%;
+  transform:translateY(-50%);
 }
-/* right player — name sits to the left of card */
+
 .slot-right{
-  flex-direction:row-reverse;
-  right:0;top:79px;
+  right:10px;
+  top:50%;
+  transform:translateY(-50%);
 }
 .table-card{ transition:transform 0.22s ease; }
 .status-bar{
@@ -320,18 +324,19 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   flex-direction:column;
   align-items:center;
   gap:6px;
+  overflow:visible;
 }
 
 #my-hand{
   width:100%;
   max-width:100%;
-  min-height:104px;
+  min-height:120px;
   display:flex;
   justify-content:flex-start;
   align-items:flex-end;
   flex-wrap:nowrap;
   gap:5px;
-  padding:4px 12px 12px;
+  padding:24px 12px 12px;
   overflow-x:auto;
   overflow-y:visible;
   scroll-padding-inline:12px;
@@ -977,7 +982,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   align-items:center;
   justify-content:flex-start;
   gap:6px;
-  min-height:160px;
+  min-height:180px;
   padding-bottom:12px;
   overflow:visible;
 }
