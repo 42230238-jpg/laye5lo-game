@@ -346,15 +346,15 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 #my-hand{
   width:100%;
   max-width:100%;
-  min-height:110px;
+  min-height:128px;
   display:flex;
   justify-content:flex-start;
   align-items:flex-end;
   flex-wrap:nowrap;
   gap:5px;
-  padding:42px 12px 10px;   /* 42px top = headroom for selected-card lift + fan arc */
+  padding:36px 12px 12px;
   overflow-x:auto;
-  overflow-y:visible;
+  overflow-y:hidden;
   scroll-padding-inline:12px;
   -webkit-overflow-scrolling:touch;
 }
@@ -1007,8 +1007,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   align-items:center;
   justify-content:flex-start;
   gap:6px;
-  min-height:200px;
-  padding-bottom:20px;
+  min-height:250px;
+  padding-bottom:12px;
   overflow:visible;
 }
 
