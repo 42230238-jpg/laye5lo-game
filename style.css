@@ -13,7 +13,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   flex-direction:column;
   align-items:center;
   justify-content:space-between;
-  padding:10px 8px 8px;
+  padding:10px 8px 24px;          /* extra bottom padding so hand never hits edge */
   box-shadow:inset 0 0 60px rgba(0,0,0,0.5);
   user-select:none;
 }
@@ -159,7 +159,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 
 /* ── MY HAND ── */
 #my-hand-area{width:100%;display:flex;flex-direction:column;align-items:center;gap:6px}
-#my-hand{display:flex;justify-content:center;flex-wrap:wrap;gap:5px;padding:4px 0}
+#my-hand{display:flex;justify-content:center;flex-wrap:wrap;gap:5px;padding:24px 0 4px}
 .my-info{display:flex;align-items:center;gap:8px;min-height:58px}
 .my-name-ring{
   width:58px;height:58px;border-radius:50%;
@@ -396,13 +396,40 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     "left  mid   right"
     "btm   btm   btm";
   gap:4px;
-  min-height:500px;
+  min-height:480px;
 }
 .tz-top2  {grid-area:top2;display:flex;justify-content:center;align-items:flex-start}
 .tz-left  {grid-area:left;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px}
 .tz-mid   {grid-area:mid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:160px}
 .tz-right {grid-area:right;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px}
-.tz-btm   {grid-area:btm;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;min-height:170px}
+.tz-btm   {grid-area:btm;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;min-height:160px;margin-bottom:4px}
 .tz-top2 .player-zone{height:112px}
 .tz-left .player-zone,.tz-right .player-zone{height:150px}
 #my-hand{min-height:92px}
+
+/* ── MOBILE / SMALL SCREEN ADJUSTMENTS ── */
+@media (max-height: 750px) {
+  #game { padding-bottom: 20px; }
+  #table-wrap { min-height: 400px; gap: 2px; }
+  .tz-mid { gap: 4px; min-height: 120px; }
+  .table-played { width: 180px; height: 180px; }
+  .table-played-empty { width: 180px; height: 180px; }
+  .tz-btm { min-height: 140px; }
+  #my-hand { padding-top: 20px; }
+}
+
+@media (max-width: 400px) {
+  #game { padding: 6px 4px 20px; }
+  #table-wrap { min-height: 380px; grid-template-columns: 60px 1fr 60px; }
+  .tz-mid { min-height: 110px; }
+  .table-played { width: 160px; height: 160px; }
+  .table-played-empty { width: 160px; height: 160px; }
+
+  /* Shrink cards on very narrow screens */
+  .card { width: 46px !important; height: 70px !important; font-size: 15px !important; }
+  .card .cnum { font-size: 16px !important; }
+  .card .corner { font-size: 8px !important; }
+  .card.selected { transform: translateY(-14px) !important; }
+  .card.playable:hover { transform: translateY(-10px); }
+  #my-hand { gap: 3px; padding-top: 18px; }
+}
