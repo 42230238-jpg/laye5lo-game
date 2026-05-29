@@ -1,5 +1,24 @@
 const BACKEND_URL = "https://laye5lo-game.onrender.com";
 const socket = io(BACKEND_URL);
+const lee5aSounds = [
+  new Audio("sounds/lee5a-1.m4a"),
+  new Audio("sounds/lee5a-2.m4a"),
+  new Audio("sounds/lee5a-3.m4a"),
+  new Audio("sounds/lee5a-4.m4a"),
+  new Audio("sounds/lee5a-5.m4a")
+];
+
+function playRandomLee5aSound() {
+  const sound = lee5aSounds[Math.floor(Math.random() * lee5aSounds.length)];
+  if (!sound) return;
+
+  sound.currentTime = 0;
+  sound.play().catch(() => {
+    console.log("Sound blocked until user interacts with the page.");
+  });
+}
+
+let lastLee5aSoundCardId = null;
 
 socket.on("connect", () => {
   console.log("Connected to multiplayer server:", socket.id);
@@ -109,6 +128,22 @@ socket.on("gameState", (data) => {
     if (G.currentPlayer === mySeatIndex) startTimer();
   }
 
+  const lastPlayedCard = G.table && G.table.length
+    ? G.table[G.table.length - 1].card
+    : null;
+
+  const isLee5aCard =
+    lastPlayedCard &&
+    (
+      (lastPlayedCard.color === "blue" && lastPlayedCard.type === "draw2") ||
+      (lastPlayedCard.color === "yellow" && lastPlayedCard.type === "0")
+    );
+
+  if (isLee5aCard && lastPlayedCard.id !== lastLee5aSoundCardId) {
+    lastLee5aSoundCardId = lastPlayedCard.id;
+    playRandomLee5aSound();
+  }
+  
   render();
 });
 
