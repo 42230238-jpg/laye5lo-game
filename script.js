@@ -87,6 +87,66 @@ socket.on("gameStarted", (data) => {
   render();
 });
 
+socket.on("gameState", (data) => {
+  console.log("gameState update — phase:", data.gameState.phase, "seat", data.mySeatIndex);
+  const gs = data.gameState;
+  const wasGift = G.phase === 'gift';
+  const wasRoundEnd = G.phase === 'roundEnd' || G.phase === 'gameEnd';
+  const nowPlay = gs.phase === 'play';
+  const nowGift = gs.phase === 'gift';
+
+  // Track this client's seat index for diamond positioning
+  if (data.mySeatIndex !== undefined) mySeatIndex = data.mySeatIndex;
+
+  // New round: host clicked Next Round
+  if (wasRoundEnd && nowGift) {
+    stopTimer();
+    giftedIds = new Set();
+    resolving = false;
+  }
+
+  // Gift phase -> play phase: glow received cards
+  if (wasGift && nowPlay) {
+    resolving = false;
+    stopTimer();
+    if (gs.receivedGiftCardIdsBySeat && gs.receivedGiftCardIdsBySeat[mySeatIndex]) {
+      giftedIds = new Set(gs.receivedGiftCardIdsBySeat[mySeatIndex]);
+      setTimeout(() => { giftedIds = new Set(); render(); }, 3000);
+    } else {
+      giftedIds = new Set();
+    }
+  }
+
+  G = {
+    ...gs,
+    roomCode: G.roomCode,
+    isHost: G.isHost,
+  };
+
+  // Hands come indexed 0-3 from server; remap so index 0 = mySeat
+  if (mySeatIndex !== 0 && gs.hands) {
+    const remapped = [];
+    for (let i = 0; i < 4; i++) remapped.push(gs.hands[(mySeatIndex + i) % 4]);
+    G.hands = remapped;
+    // Also remap scores, roundPts, names to match visual seat order
+    G.scores    = Array.from({length:4}, (_,i) => gs.scores[(mySeatIndex+i)%4]);
+    G.roundPts  = Array.from({length:4}, (_,i) => (gs.roundPts||[0,0,0,0])[(mySeatIndex+i)%4]);
+    playerNames = Array.from({length:4}, (_,i) => gs.playerNames[(mySeatIndex+i)%4]);
+    // Remap table pi values too
+    if (gs.table) G.table = gs.table.map(t => ({...t, pi: (t.pi - mySeatIndex + 4) % 4}));
+    // currentPlayer relative to me
+    if (gs.currentPlayer !== undefined) G.currentPlayer = (gs.currentPlayer - mySeatIndex + 4) % 4;
+  } else {
+    if (gs.playerNames) playerNames = [...gs.playerNames];
+  }
+
+  resolving = !!gs.trickResolving;
+  if (G.currentPlayer === 0 && !resolving && G.phase === 'play') startTimer();
+  else stopTimer();
+
+  render();
+});
+
 socket.on("lobbyError", (message) => {
   console.warn("Lobby error:", message);
   G.roomMsg = message;
@@ -235,6 +295,7 @@ let giftedIds=new Set();  // card ids that glow after gifting
 let playerNames=[...DEFAULT_NAMES];
 let nextRoundStarter=0;
 let botDifficulty='easy';
+let mySeatIndex=0;        // 0 in Quick Play; set from server in online mode
 
 function initMenu(){
   stopTimer();
@@ -581,17 +642,26 @@ function buildHTML(){
   const playableIds=new Set((isMyTurn?getPlayable(0):[]).map(c=>c.id));
   const selIds=new Set(G.selected.map(c=>c.id));
 
-  // TABLE CENTER CARDS
-  const rots=[5,-5,10,-10];
-  const tableCards=G.table.length===0
-    ?`<span style="font-size:12px;color:rgba(255,255,255,0.4)">Waiting for first card...</span>`
-    :G.table.map((t,i)=>{
-        const offsuit=G.leadColor&&t.card.color!==G.leadColor;
-        return `<div class="played-slot">
-          <span class="played-name">${pname(t.pi)}${offsuit?' *':''}</span>
-          <div class="table-card" style="transform:rotate(${(i-1.5)*4}deg)">${cardEl(t.card,{offsuit})}</div>
-        </div>`;
-      }).join('');
+  // TABLE CENTER CARDS — diamond layout by relative seat
+  // rel 0=bottom(me), 1=right, 2=top(opposite), 3=left
+  const SLOT_CLASS  = ['slot-bottom','slot-right','slot-top','slot-left'];
+  const SLOT_ROT    = [0, 6, 0, -6];
+
+  let tableCards;
+  if (G.table.length === 0) {
+    tableCards = '';  // empty state handled by table-played-empty div below
+  } else {
+    const slots = {};
+    G.table.forEach(t => {
+      const rel = (t.pi - mySeatIndex + 4) % 4;
+      const offsuit = G.leadColor && t.card.color !== G.leadColor;
+      slots[rel] = `<div class="played-slot ${SLOT_CLASS[rel]}">
+        <span class="played-name">${pname(t.pi)}${offsuit?' ✦':''}</span>
+        <div class="table-card" style="transform:rotate(${SLOT_ROT[rel]}deg)">${cardEl(t.card,{offsuit})}</div>
+      </div>`;
+    });
+    tableCards = Object.values(slots).join('');
+  }
 
   // MY HAND — fan slightly
   const myHand=G.hands[0];
@@ -644,10 +714,13 @@ function buildHTML(){
     </div>
   </div>
 
-  <!-- CENTER: table -->
+  <!-- CENTER: table — diamond layout -->
   <div class="tz-mid">
     ${G.leadColor?`<div class="lead-chip">Lead: ${G.leadColor}</div>`:''}
-    <div class="table-played">${tableCards}</div>
+    ${G.table.length===0
+      ? `<div class="table-played-empty">Waiting for first card...</div>`
+      : `<div class="table-played">${tableCards}</div>`
+    }
     <div class="status-bar">${G.statusMsg}</div>
     ${G.botThought?`<div class="thought-chip">${G.botThought}</div>`:''}
   </div>

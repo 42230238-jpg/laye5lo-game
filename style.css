@@ -1,4 +1,3 @@
-
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;background:transparent;font-family:'Segoe UI',system-ui,sans-serif}
 h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
@@ -228,53 +227,56 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 }
 
 /* ── DIAMOND TABLE LAYOUT ── */
+/*
+  Container 240x240. Card = 54x82px.
+  bottom: (240-54)/2 = 93px from left
+  left/right: (240-82)/2 = 79px from top
+*/
 .table-played{
   position:relative;
-  width:220px;
-  height:220px;
+  width:240px;
+  height:240px;
   flex-shrink:0;
 }
-
 .table-played-empty{
-  font-size:12px;
-  color:rgba(255,255,255,0.4);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  width:220px;
-  height:220px;
+  width:240px;height:240px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;color:rgba(255,255,255,0.35);
 }
-
 .played-slot{
   position:absolute;
   display:flex;
-  flex-direction:column;
   align-items:center;
   gap:3px;
 }
-
-.slot-bottom{bottom:0;left:50%;transform:translateX(-50%)}
-.slot-top{top:0;left:50%;transform:translateX(-50%)}
-.slot-left{left:0;top:50%;transform:translateY(-50%)}
-.slot-right{right:0;top:50%;transform:translateY(-50%)}
-
 .played-name{
-  font-size:9px;
-  color:rgba(255,255,255,0.7);
-  font-weight:600;
-  text-shadow:0 1px 2px rgba(0,0,0,.9);
-  white-space:nowrap;
-  order:-1;
+  font-size:9px;font-weight:700;
+  color:rgba(255,255,255,0.8);
+  text-shadow:0 1px 3px rgba(0,0,0,1);
+  white-space:nowrap;line-height:1;
 }
-
-.slot-bottom .played-name{
-  order:1;
+/* bottom = me */
+.slot-bottom{
+  flex-direction:column;
+  left:93px;bottom:0;
 }
-
-.table-card{
-  transition:transform 0.25s;
+.slot-bottom .played-name{ order:1; }
+/* top = opposite */
+.slot-top{
+  flex-direction:column;
+  left:93px;top:0;
 }
-
+/* left player — name sits to the right of card */
+.slot-left{
+  flex-direction:row;
+  left:0;top:79px;
+}
+/* right player — name sits to the left of card */
+.slot-right{
+  flex-direction:row-reverse;
+  right:0;top:79px;
+}
+.table-card{ transition:transform 0.22s ease; }
 .status-bar{
   background:rgba(0,0,0,0.45);
   border-radius:20px;
@@ -1041,5 +1043,11 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   #table-wrap .card .csym{
     font-size:8px;
   }
-}
 
+  /* diamond slot offsets for smaller container on mobile */
+  .table-played, .table-played-empty { width:180px; height:180px; }
+  .slot-bottom { left:63px; }   /* (180-54)/2 */
+  .slot-top    { left:63px; }
+  .slot-left   { top:49px; }    /* (180-82)/2 */
+  .slot-right  { top:49px; }
+}
