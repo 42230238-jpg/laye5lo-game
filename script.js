@@ -131,6 +131,9 @@ socket.on("gameStarted", (data) => {
   giftedIds = new Set();
   stopTimer();
 
+  // Set our seat index immediately so attachEvents uses the right hand index
+  if (data.mySeatIndex !== undefined) mySeatIndex = data.mySeatIndex;
+
   G = {
     ...gs,
     // Preserve online room identity so we can still tell we're in an online game
@@ -956,19 +959,19 @@ function attachEvents(){
   });
   document.querySelectorAll('[data-play]').forEach(el=>{
     el.addEventListener('click',()=>{
-      // After gameState remapping, G.hands[0] is always the local player's hand
-      // and G.currentPlayer===0 means it's our turn — use 0, not raw mySeatIndex
+      // G.currentPlayer===0 always means our turn after server remapping
       if(G.currentPlayer!==0||resolving)return;
       const id=el.dataset.play;
       const card=G.hands[0].find(c=>c.id===id);
       if(!card)return;
       if(!getPlayable(0).find(c=>c.id===card.id))return;
-      playCardDropSound();
       if(G.roomCode){
-        socket.emit('playCard',{roomCode:G.roomCode,cardId:id});
-      } else {
-        executePlay(0,card);
+        // Online: emit to server; server validates, updates state, and broadcasts gameState back
+        socket.emit('playCard',{roomCode:G.roomCode,cardId:card.id});
+        return;
       }
+      // Local Quick Play: update state directly
+      executePlay(0,card);
     });
   });
 }
