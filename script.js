@@ -170,16 +170,23 @@ socket.on("gameState", (data) => {
     }
   }
 
-  // Online sound: detect newly played lee card by comparing table lengths
+  // Online sound: detect newly played card by comparing table lengths.
+  // Skip if the new card was played by THIS client (already fired on click).
   if (G.phase === 'play' && gs.phase === 'play') {
     const prevTableLen = G.table ? G.table.length : 0;
     const newTableLen = gs.table ? gs.table.length : 0;
     if (newTableLen > prevTableLen) {
-      // A new card was played
-      SFX.playCardPlay();
       const lastEntry = gs.table[gs.table.length - 1];
-      if (lastEntry && isLee(lastEntry.card)) {
-        setTimeout(() => SFX.playLee(), 120);
+      const playedByMe = lastEntry && lastEntry.pi === data.mySeatIndex;
+      if (!playedByMe) {
+        // Someone else played — play the card sound for all listeners
+        SFX.playCardPlay();
+        if (lastEntry && isLee(lastEntry.card)) {
+          setTimeout(() => SFX.playLee(), 120);
+        }
+      } else if (lastEntry && isLee(lastEntry.card)) {
+        // My own lee: sound already fired on click, but play voice for OTHER clients.
+        // (This branch intentionally left empty — sound was already played on click.)
       }
     }
   }
@@ -595,10 +602,11 @@ function finishTrick(){
   const leeCount=tCards.filter(c=>isLee(c)).length;
   const blueDraw2Taken=tCards.some(c=>c.color==='blue'&&c.type==='draw2');
   if(blueDraw2Taken)nextRoundStarter=rightOf(wi);
+  // Both-lee trick: 37 flat + any red cards played on that same trick
   let p=tCards.reduce((s,c)=>s+pts(c),0);
-  if(leeCount===2)p=37;
+  if(leeCount===2)p=37+tCards.filter(c=>c.color==='red').reduce((s,c)=>s+pts(c),0);
   G.roundPts[wi]+=p;
-  G.statusMsg=p===37?`${pname(wi)} took both Lee5as! +37 pts - round over!`:`${pname(wi)} wins trick${p>0?' (+'+p+'pts)':''}`;
+  G.statusMsg=leeCount===2?`${pname(wi)} took both Lee5as! +${p} pts - round over!`:`${pname(wi)} wins trick${p>0?' (+'+p+'pts)':''}`;
   G.table=[];G.leadColor=null;
   if(leeCount===2){endRound();return;}
   if(G.hands.every(h=>h.length===0)){endRound();return;}

@@ -441,8 +441,9 @@ function playCardForSeat(roomCode, seatIndex, cardId) {
 
   if (trickDone) {
     // ── Score and finish the trick ──────────────────────────
+    // Both-lee trick: winner gets 37 flat + any red cards played on that same trick
     const trickPts = leesOnTable === 2
-      ? 37
+      ? 37 + game.table.reduce((s, t) => s + (t.card.color === 'red' ? pts(t.card) : 0), 0)
       : game.table.reduce((s, t) => s + pts(t.card), 0);
 
     const winner = trickWinnerServer(game.table, game.leadColor);
@@ -451,7 +452,7 @@ function playCardForSeat(roomCode, seatIndex, cardId) {
     game.roundPts[wi] = (game.roundPts[wi] || 0) + trickPts;
 
     const msg = leesOnTable === 2
-      ? `${game.playerNames[wi]} took both Lee5as! +37 pts`
+      ? `${game.playerNames[wi]} took both Lee5as! +${trickPts} pts`
       : `${game.playerNames[wi]} wins trick${trickPts > 0 ? ` (+${trickPts}pts)` : ''}`;
 
     game.statusMsg = msg;
