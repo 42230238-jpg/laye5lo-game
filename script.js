@@ -69,6 +69,167 @@ const SFX = (() => {
   return { playLee, playCardPlay, playMyTurn };
 })();
 
+// ── ANIMATION SYSTEM ─────────────────────────────────────
+const ANIM = (() => {
+  // ── helpers ──────────────────────────────────────────────
+  function colorClass(color){
+    return {red:'cr',blue:'cb',green:'cg',yellow:'cy'}[color]||'cb';
+  }
+  function cardLabel(card){
+    if(card.type==='draw2')return '+2';
+    if(card.type==='skip')return '⊘';
+    if(card.type==='reverse')return '↺';
+    return card.type;
+  }
+  // Get the bounding rect of a CSS selector, return center {x,y}
+  function center(sel){
+    const el=document.querySelector(sel);
+    if(!el)return null;
+    const r=el.getBoundingClientRect();
+    return{x:r.left+r.width/2, y:r.top+r.height/2};
+  }
+  // Get anim-layer (create if missing)
+  function layer(){
+    let el=document.getElementById('anim-layer');
+    if(!el){
+      el=document.createElement('div');
+      el.id='anim-layer';
+      const game=document.getElementById('game')||document.body;
+      game.appendChild(el);
+    }
+    return el;
+  }
+  function clearLayer(){
+    const l=document.getElementById('anim-layer');
+    if(l)l.innerHTML='';
+  }
+
+  // ── SHUFFLE + DEAL ────────────────────────────────────────
+  // Shows a shuffle animation then calls `done` when finished.
+  // totalCards = 52, dealTo = array of 4 selector strings for player hand zones.
+  function shuffleAndDeal(done){
+    // Inject the overlay
+    const game=document.getElementById('game')||document.body;
+    const overlay=document.createElement('div');
+    overlay.id='shuffle-overlay';
+
+    const NSTACK=8; // visible stacked cards
+    const deckHTML=Array(NSTACK).fill(0).map((_,i)=>`<div class="sdeck-card" style="transform:translate(${(i-NSTACK/2)*0.6}px,${-i*0.9}px);z-index:${i}"></div>`).join('');
+    overlay.innerHTML=`<div id="shuffle-deck">${deckHTML}</div><div id="shuffle-label">Shuffling…</div>`;
+    game.appendChild(overlay);
+
+    const deck=overlay.querySelector('#shuffle-deck');
+    const cards=[...deck.querySelectorAll('.sdeck-card')];
+
+    // ── Phase 1: 3 quick shuffle pulses ──
+    let pulse=0;
+    function doPulse(){
+      if(pulse>=3){afterShuffle();return;}
+      cards.forEach((c,i)=>{
+        const goLeft=i%2===0;
+        c.style.animation='none';
+        c.getBoundingClientRect(); // force reflow
+        c.style.animation=`${goLeft?'shuffle-left':'shuffle-right'} 0.32s ease forwards`;
+      });
+      pulse++;
+      setTimeout(doPulse, 340);
+    }
+    doPulse();
+
+    // ── Phase 2: deal 4 cards outward ──
+    function afterShuffle(){
+      overlay.querySelector('#shuffle-label').textContent='Dealing…';
+      // Positions relative to the overlay center
+      const dirs=[
+        {dx:0,   dy:-220, kf:'sdeal-top'},
+        {dx:220, dy:0,    kf:'sdeal-right'},
+        {dx:0,   dy:220,  kf:'sdeal-bottom'},
+        {dx:-220,dy:0,    kf:'sdeal-left'},
+      ];
+      dirs.forEach((d,i)=>{
+        setTimeout(()=>{
+          const c=document.createElement('div');
+          c.className='sdeck-card';
+          c.style.cssText=`z-index:${NSTACK+i};animation:${d.kf} 0.42s cubic-bezier(.4,0,.2,1) forwards`;
+          deck.appendChild(c);
+        }, i*80);
+      });
+      // Fade out overlay after dealing done
+      setTimeout(()=>{
+        overlay.style.transition='opacity 0.35s';
+        overlay.style.opacity='0';
+        setTimeout(()=>{
+          overlay.remove();
+          done();
+        },360);
+      }, 4*80+440);
+    }
+  }
+
+  // ── CARD FLY (drop onto table) ────────────────────────────
+  // Animates a card flying from `fromRect` center → `toRect` center.
+  // card = {color, type}. onDone called after animation.
+  function flyCard(card, fromX, fromY, toX, toY, onDone){
+    const lbl=cardLabel(card);
+    const cc=colorClass(card.color);
+    const el=document.createElement('div');
+    el.className=`fly-card ${cc}`;
+    // start position (centered on the card)
+    el.style.cssText=`left:${fromX-27}px;top:${fromY-41}px;opacity:0;transform:scale(0.7) rotate(${(Math.random()-0.5)*20}deg)`;
+    el.innerHTML=`<div class="fly-label">${lbl}</div><div class="fly-sym">${card.color}</div>`;
+    document.body.appendChild(el);
+
+    // Trigger start (force reflow first)
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        el.style.opacity='1';
+        el.style.transform=`translate(${toX-fromX}px,${toY-fromY}px) scale(1) rotate(0deg)`;
+        setTimeout(()=>{
+          el.style.opacity='0';
+          setTimeout(()=>{ el.remove(); if(onDone)onDone(); },140);
+        },360);
+      });
+    });
+  }
+
+  // ── TRICK SWEEP ──────────────────────────────────────────
+  // Animates all table cards flying toward winner's avatar, then calls onDone.
+  // slots = array of {card, el: DOMRect of the played slot}
+  // winnerRect = DOMRect of winner avatar
+  function sweepTrick(slotRects, winnerX, winnerY, onDone){
+    const els=[];
+    slotRects.forEach(({card,x,y})=>{
+      const lbl=cardLabel(card);
+      const cc=colorClass(card.color);
+      const el=document.createElement('div');
+      el.className=`sweep-card ${cc}`;
+      el.style.cssText=`left:${x-27}px;top:${y-41}px;font-size:14px;font-weight:700;color:inherit;display:flex;align-items:center;justify-content:center;`;
+      el.textContent=lbl;
+      document.body.appendChild(el);
+      els.push(el);
+    });
+
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        els.forEach(el=>{
+          const cx=parseFloat(el.style.left)+27;
+          const cy=parseFloat(el.style.top)+41;
+          el.style.transform=`translate(${winnerX-cx}px,${winnerY-cy}px) scale(0.3)`;
+          el.style.opacity='0';
+        });
+        setTimeout(()=>{
+          els.forEach(e=>e.remove());
+          if(onDone)onDone();
+        },480);
+      });
+    });
+  }
+
+  // ── PUBLIC INTERFACE ─────────────────────────────────────
+  return { shuffleAndDeal, flyCard, sweepTrick, center };
+})();
+
+
 socket.on("connect", () => {
   console.log("Connected to multiplayer server:", socket.id);
 });
@@ -196,9 +357,17 @@ socket.on("gameState", (data) => {
         if (lastEntry && isLee(lastEntry.card)) {
           setTimeout(() => SFX.playLee(), 120);
         }
+        // Fly animation for opponent's card
+        if (lastEntry && lastEntry.pi !== undefined && lastEntry.pi >= 0) {
+          const pi = lastEntry.pi;
+          const relPos = (pi - data.mySeatIndex + 4) % 4;
+          const avatarSels = ['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
+          const fromPt = ANIM.center(avatarSels[relPos]) || {x:window.innerWidth/2,y:window.innerHeight/2};
+          const toPt = ANIM.center('.tz-mid') || {x:window.innerWidth/2,y:window.innerHeight/2};
+          ANIM.flyCard(lastEntry.card, fromPt.x, fromPt.y, toPt.x, toPt.y, null);
+        }
       }
-      // My own card: sound already fired on click.
-      // But if it was MY own lee that ended the round, the voice already played too.
+      // My own card: sound + fly already fired on click.
     }
   }
 
@@ -385,7 +554,10 @@ function initGame(names=[...DEFAULT_NAMES]){
   G={phase:'gift',hands:hands.map(sortHand),gifts:[null,null,null,null],table:[],
      currentPlayer:0,leadColor:null,scores:[0,0,0,0],roundPts:[0,0,0,0],
      selected:[],statusMsg:`Choose 3 cards to gift to ${pname(1)}`,botThought:'',playedCards:[],knownGiftedLees:[],modal:null};
-  resolving=false;giftedIds=new Set();stopTimer();render();
+  resolving=false;giftedIds=new Set();stopTimer();
+  // Show shuffle+deal animation, then render gift phase
+  G.phase='shuffling'; render();
+  ANIM.shuffleAndDeal(()=>{ G.phase='gift'; render(); });
 }
 
 function getPlayable(idx){
@@ -404,6 +576,16 @@ function executePlay(pi,card,reason=''){
   if(isLee(card)) setTimeout(()=>SFX.playLee(), 120);
   stopTimer();
   G.botThought=pi!==0&&reason?`${pname(pi)} chose ${lbl(card)} because ${reason}.`:'';
+
+  // ── Fly animation: capture positions before state changes ──
+  const relPos=(pi-mySeatIndex+4)%4;  // 0=me,1=right,2=top,3=left
+  const avatarSel=['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'][relPos];
+  const slotSel=['.slot-bottom','.slot-right','.slot-top','.slot-left'][relPos];
+  const fromPt=ANIM.center(avatarSel)||{x:window.innerWidth/2,y:window.innerHeight/2};
+  // target = existing slot if present, else center of tz-mid
+  const toPt=ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
+  ANIM.flyCard(card, fromPt.x, fromPt.y, toPt.x, toPt.y, null);
+
   if(!G.playedCards)G.playedCards=[];
   G.playedCards.push(card);
   G.table.push({pi,card});
@@ -411,13 +593,16 @@ function executePlay(pi,card,reason=''){
   if(!G.leadColor)G.leadColor=card.color;
   G.selected=[];
   if(hasBothLees(G.table)||G.table.length===4||!hasNextTrickPlayer(G.currentPlayer)){
-    resolving=true;G.statusMsg=hasBothLees(G.table)?'Both Lee5as taken! Round ends now.':'Trick complete...';render();
-    setTimeout(finishTrick,1150);
+    resolving=true;G.statusMsg=hasBothLees(G.table)?'Both Lee5as taken! Round ends now.':'Trick complete...';
+    setTimeout(()=>{ render(); setTimeout(finishTrick,1150); },200);
   } else {
     G.currentPlayer=nextTrickP(G.currentPlayer);
-    setStatus();render();
-    if(G.currentPlayer===mySeatIndex){startTimer();}
-    else{setTimeout(aiPlay,680);}
+    setStatus();
+    setTimeout(()=>{
+      render();
+      if(G.currentPlayer===mySeatIndex){startTimer();}
+      else{setTimeout(aiPlay,480);}
+    },200);
   }
 }
 function nextP(p){return(p+1)%4;}
@@ -620,12 +805,26 @@ function finishTrick(){
   G.roundPts[wi]+=p;
   if(leeCount===2)G.roundPts=G.roundPts.map((v,i)=>i===wi?v:0);
   G.statusMsg=leeCount===2?`${pname(wi)} took both Lee5as! +${p} pts - round over!`:`${pname(wi)} wins trick${p>0?' (+'+p+'pts)':''}`;
+  // ── Sweep animation: fly table cards to winner before clearing ──
+  const _slotNames=['slot-bottom','slot-right','slot-top','slot-left'];
+  const _slotRects=G.table.map(t=>{
+    const rp=(t.pi-mySeatIndex+4)%4;
+    const el=document.querySelector('.'+_slotNames[rp]);
+    const pt=el?(()=>{const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};})():ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
+    return{card:t.card,x:pt.x,y:pt.y};
+  });
+  const _winRp=(wi-mySeatIndex+4)%4;
+  const _winSels=['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
+  const _winPt=ANIM.center(_winSels[_winRp])||{x:window.innerWidth/2,y:window.innerHeight/2};
   G.table=[];G.leadColor=null;
-  if(leeCount===2){endRound();return;}
-  if(G.hands.every(h=>h.length===0)){endRound();return;}
-  G.currentPlayer=G.hands[wi].length>0?wi:nextActiveP(wi);setStatus();render();
-  if(G.currentPlayer===mySeatIndex){startTimer();}
-  else{setTimeout(aiPlay,720);}
+  render(); // clear table visually before sweep
+  ANIM.sweepTrick(_slotRects,_winPt.x,_winPt.y,()=>{
+    if(leeCount===2){endRound();return;}
+    if(G.hands.every(h=>h.length===0)){endRound();return;}
+    G.currentPlayer=G.hands[wi].length>0?wi:nextActiveP(wi);setStatus();render();
+    if(G.currentPlayer===mySeatIndex){startTimer();}
+    else{setTimeout(aiPlay,720);}
+  });
 }
 function pname(i){return playerNames[i]||DEFAULT_NAMES[i];}
 function setStatus(){
@@ -714,6 +913,7 @@ function buildHTML(){
   if(G.phase==='customRoom')return buildCustomRoomHTML()+modal;
   if(G.phase==='roomLobby')return buildRoomLobbyHTML()+modal;
   if(G.phase==='gift')return buildGiftHTML()+modal;
+  if(G.phase==='shuffling')return buildShufflingHTML();
 
   // rel(n): seat index at position n steps clockwise from my seat
   // bottom=me(0), right=+1, top=+2, left=+3
@@ -854,6 +1054,14 @@ function buildHTML(){
 ${modal}`;
 }
 
+
+// ── SHUFFLE PHASE (blank table while overlay runs) ─────────
+function buildShufflingHTML(){
+  return `
+<div id="table-wrap" style="display:flex;align-items:center;justify-content:center;min-height:520px">
+  <div style="color:rgba(255,255,255,0.3);font-size:13px;font-weight:600">Shuffling…</div>
+</div>`;
+}
 
 // ── GIFT PHASE ────────────────────────────────────────────
 function buildGiftHTML(){
@@ -1026,6 +1234,10 @@ function attachEvents(){
         // Online: send to server; server will broadcast gameState to everyone
         SFX.playCardPlay();
         if(isLee(card)) setTimeout(()=>SFX.playLee(), 120);
+        // Fly from my avatar to center
+        const _fp=ANIM.center('.tz-btm .avatar')||{x:window.innerWidth/2,y:window.innerHeight*0.8};
+        const _tp=ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
+        ANIM.flyCard(card,_fp.x,_fp.y,_tp.x,_tp.y,null);
         socket.emit('playCard',{roomCode:G.roomCode,cardId:id});
       } else {
         // Local Quick Play: run the full local engine
@@ -1360,9 +1572,10 @@ window.copyRoomCode=function(){
 function newRound(){
   const deck=shuffle(buildDeck());const hands=[[],[],[],[]];
   deck.forEach((c,i)=>hands[i%4].push(c));
-  G.hands=hands.map(sortHand);G.phase='gift';G.gifts=[null,null,null,null];G.table=[];
+  G.hands=hands.map(sortHand);G.phase='shuffling';G.gifts=[null,null,null,null];G.table=[];
   G.leadColor=null;G.selected=[];G.statusMsg=`Choose 3 cards to gift to ${pname(1)}`;G.botThought='';G.playedCards=[];G.knownGiftedLees=[];G.modal=null;G.roundPts=[0,0,0,0];
   resolving=false;giftedIds=new Set();stopTimer();render();
+  ANIM.shuffleAndDeal(()=>{ G.phase='gift'; render(); });
 }
 
 initMenu();
