@@ -1,80 +1,6 @@
 const BACKEND_URL = "https://laye5lo-game.onrender.com";
 const socket = io(BACKEND_URL);
 
-const lee5aSounds = [
-  new Audio("sounds/lee5a-1.m4a"),
-  new Audio("sounds/lee5a-2.m4a"),
-  new Audio("sounds/lee5a-3.m4a"),
-  new Audio("sounds/lee5a-4.m4a"),
-  new Audio("sounds/lee5a-5.m4a")
-];
-
-function playRandomLee5aSound() {
-  const sound = lee5aSounds[Math.floor(Math.random() * lee5aSounds.length)];
-  if (!sound) return;
-
-  sound.currentTime = 0;
-  sound.play().catch(() => {
-    console.log("Sound blocked until user interacts with the page.");
-  });
-}
-
-// ── SYNTHESISED SOUND EFFECTS ────────────────────────────
-// Card drop: short percussive thud using a decaying oscillator + noise burst
-function playCardDropSound() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // Low thud
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(160, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.12);
-    gain.gain.setValueAtTime(0.55, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.18);
-    // Crisp click layer
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) * 0.35;
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const clickGain = ctx.createGain();
-    clickGain.gain.setValueAtTime(1, ctx.currentTime);
-    src.connect(clickGain);
-    clickGain.connect(ctx.destination);
-    src.start(ctx.currentTime);
-    setTimeout(() => ctx.close(), 500);
-  } catch(e) {}
-}
-
-// Your-turn ding: two-tone pleasant chime
-function playYourTurnSound() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [[523, 0, 0.18], [659, 0.15, 0.32]].forEach(([freq, startOff, dur]) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      const t = ctx.currentTime + startOff;
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.28, t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + dur);
-    });
-    setTimeout(() => ctx.close(), 800);
-  } catch(e) {}
-}
-
-let lastLee5aSoundCardId = null;
-
 socket.on("connect", () => {
   console.log("Connected to multiplayer server:", socket.id);
 });
@@ -121,11 +47,11 @@ socket.on("roomUpdated", (data) => {
 });
 
 socket.on("gameStarted", (data) => {
-  console.log("Game started — applying server game state:", data.roomCode);
+  console.log("Game started — seat", data.mySeatIndex, "room", data.roomCode);
   const gs = data.gameState;
 
-  // Apply the server-dealt state directly — no local shuffle
   playerNames = [...gs.playerNames];
+  mySeatIndex = data.mySeatIndex;
   nextRoundStarter = 0;
   resolving = false;
   giftedIds = new Set();
@@ -133,78 +59,55 @@ socket.on("gameStarted", (data) => {
 
   G = {
     ...gs,
-    // Preserve online room identity so we can still tell we're in an online game
     roomCode: data.roomCode,
-    isHost: G.isHost  // keep whatever role this client had
+    isHost: G.isHost,
+    giftSubmitted: false,
+    roomMsg: ''
   };
 
   render();
 });
 
+// Live game state pushed after submitGift or playCard
 socket.on("gameState", (data) => {
-  console.log("gameState update — phase:", data.gameState.phase, "seat", data.mySeatIndex);
+  console.log("Game state update — phase:", data.gameState.phase, "seat", data.mySeatIndex);
   const gs = data.gameState;
   const wasGift = G.phase === 'gift';
   const wasRoundEnd = G.phase === 'roundEnd' || G.phase === 'gameEnd';
   const nowPlay = gs.phase === 'play';
   const nowGift = gs.phase === 'gift';
-  const prevTableLen = (G.table || []).length;
 
-  // Track this client's seat index for diamond positioning
-  if (data.mySeatIndex !== undefined) mySeatIndex = data.mySeatIndex;
-
-  // New round: host clicked Next Round
+  // Host clicked Next Round — everyone enters fresh gift phase
   if (wasRoundEnd && nowGift) {
     stopTimer();
     giftedIds = new Set();
     resolving = false;
   }
 
-  // Gift phase -> play phase: glow received cards
+  playerNames = [...gs.playerNames];
+  mySeatIndex = data.mySeatIndex;
+
+  G = {
+    ...gs,
+    roomCode: data.roomCode,
+    isHost: G.isHost,
+    giftSubmitted: gs.phase === 'gift' ? (G.giftSubmitted || false) : false,
+    roomMsg: gs.phase === 'gift' ? (G.roomMsg || '') : ''
+  };
+
+  // When transitioning gift→play, highlight the incoming gift cards for this seat
   if (wasGift && nowPlay) {
     resolving = false;
     stopTimer();
-    if (gs.receivedGiftCardIdsBySeat && gs.receivedGiftCardIdsBySeat[mySeatIndex]) {
-      giftedIds = new Set(gs.receivedGiftCardIdsBySeat[mySeatIndex]);
+    // Server now tells us exactly which card IDs this seat received as gifts
+    if (gs.receivedGiftCardIdsBySeat && gs.receivedGiftCardIdsBySeat[data.mySeatIndex]) {
+      giftedIds = new Set(gs.receivedGiftCardIdsBySeat[data.mySeatIndex]);
       setTimeout(() => { giftedIds = new Set(); render(); }, 3000);
     } else {
       giftedIds = new Set();
     }
+    if (G.currentPlayer === mySeatIndex) startTimer();
   }
-
-  G = {
-    ...gs,
-    roomCode: G.roomCode,
-    isHost: G.isHost,
-  };
-
-  // Hands come indexed 0-3 from server; remap so index 0 = mySeat
-  if (mySeatIndex !== 0 && gs.hands) {
-    const remapped = [];
-    for (let i = 0; i < 4; i++) remapped.push(gs.hands[(mySeatIndex + i) % 4]);
-    G.hands = remapped;
-    // Also remap scores, roundPts, names to match visual seat order
-    G.scores    = Array.from({length:4}, (_,i) => gs.scores[(mySeatIndex+i)%4]);
-    G.roundPts  = Array.from({length:4}, (_,i) => (gs.roundPts||[0,0,0,0])[(mySeatIndex+i)%4]);
-    playerNames = Array.from({length:4}, (_,i) => gs.playerNames[(mySeatIndex+i)%4]);
-    // Remap table pi values too
-    if (gs.table) G.table = gs.table.map(t => ({...t, pi: (t.pi - mySeatIndex + 4) % 4}));
-    // currentPlayer relative to me
-    if (gs.currentPlayer !== undefined) G.currentPlayer = (gs.currentPlayer - mySeatIndex + 4) % 4;
-  } else {
-    if (gs.playerNames) playerNames = [...gs.playerNames];
-  }
-
-  resolving = !!gs.trickResolving;
-
-  // Play drop sound when a new card lands on the table (bot or opponent plays)
-  const newTableLen = (G.table || []).length;
-  if (newTableLen > prevTableLen && nowPlay) {
-    playCardDropSound();
-  }
-
-  if (G.currentPlayer === 0 && !resolving && G.phase === 'play') startTimer();
-  else stopTimer();
 
   render();
 });
@@ -350,6 +253,7 @@ function hasNextTrickPlayer(p){
 }
 
 let G={phase:'menu',modal:null,roomCode:null,roomMsg:''};
+let mySeatIndex=0;        // which seat this client occupies; 0 for local Quick Play
 let resolving=false;
 let turnTimer=null;       // interval id for countdown
 let turnTimeLeft=20;      // seconds remaining
@@ -357,10 +261,10 @@ let giftedIds=new Set();  // card ids that glow after gifting
 let playerNames=[...DEFAULT_NAMES];
 let nextRoundStarter=0;
 let botDifficulty='easy';
-let mySeatIndex=0;        // 0 in Quick Play; set from server in online mode
 
 function initMenu(){
   stopTimer();
+  mySeatIndex=0;
   G={phase:'menu',modal:null,roomCode:null,roomMsg:''};
   resolving=false;giftedIds=new Set();render();
 }
@@ -389,17 +293,10 @@ function getPlayable(idx){
 
 function executePlay(pi,card,reason=''){
   stopTimer();
-  playCardDropSound();
   G.botThought=pi!==0&&reason?`${pname(pi)} chose ${lbl(card)} because ${reason}.`:'';
   if(!G.playedCards)G.playedCards=[];
   G.playedCards.push(card);
   G.table.push({pi,card});
-  if (
-  (card.color === "blue" && card.type === "draw2") ||
-  (card.color === "yellow" && card.type === "0")
-) {
-  playRandomLee5aSound();
-}
   G.hands[pi]=sortHand(G.hands[pi].filter(c=>c.id!==card.id));
   if(!G.leadColor)G.leadColor=card.color;
   G.selected=[];
@@ -409,7 +306,7 @@ function executePlay(pi,card,reason=''){
   } else {
     G.currentPlayer=nextTrickP(G.currentPlayer);
     setStatus();render();
-    if(G.currentPlayer===0){startTimer();}
+    if(G.currentPlayer===mySeatIndex){startTimer();}
     else{setTimeout(aiPlay,680);}
   }
 }
@@ -614,12 +511,12 @@ function finishTrick(){
   if(leeCount===2){endRound();return;}
   if(G.hands.every(h=>h.length===0)){endRound();return;}
   G.currentPlayer=G.hands[wi].length>0?wi:nextActiveP(wi);setStatus();render();
-  if(G.currentPlayer===0){startTimer();}
+  if(G.currentPlayer===mySeatIndex){startTimer();}
   else{setTimeout(aiPlay,720);}
 }
 function pname(i){return playerNames[i]||DEFAULT_NAMES[i];}
 function setStatus(){
-  G.statusMsg=G.currentPlayer===0?`Your turn!${G.leadColor?' - follow '+G.leadColor:''}`:pname(G.currentPlayer)+' is playing...';
+  G.statusMsg=G.currentPlayer===mySeatIndex?`Your turn!${G.leadColor?' - follow '+G.leadColor:''}`:pname(G.currentPlayer)+' is playing...';
 }
 function endRound(){
   G.scores=G.scores.map((s,i)=>s+G.roundPts[i]);
@@ -654,7 +551,8 @@ function doGifts(){
 }
 
 function aiPlay(){
-  if(G.phase!=='play'||G.currentPlayer===0||resolving)return;
+  if(G.roomCode)return;  // online: server drives turns, no local bots
+  if(G.phase!=='play'||G.currentPlayer===mySeatIndex||resolving)return;
   const idx=G.currentPlayer,pl=getPlayable(idx);
   const choice=botDifficulty==='easy'?pickEasyCard(pl):pickSmartCard(idx,pl,botDifficulty);
   if(botDifficulty==='hard')G.statusMsg=`${pname(idx)}: ${choice.reason}.`;
@@ -701,33 +599,40 @@ function buildHTML(){
   if(G.phase==='roomLobby')return buildRoomLobbyHTML()+modal;
   if(G.phase==='gift')return buildGiftHTML()+modal;
 
-  const isMyTurn=G.currentPlayer===0&&!resolving&&G.phase==='play';
-  const playableIds=new Set((isMyTurn?getPlayable(0):[]).map(c=>c.id));
-  const selIds=new Set(G.selected.map(c=>c.id));
+  // rel(n): seat index at position n steps clockwise from my seat
+  // bottom=me(0), right=+1, top=+2, left=+3
+  const rel = n => (mySeatIndex + n) % 4;
 
-  // TABLE CENTER CARDS — diamond layout by relative seat
-  // rel 0=bottom(me), 1=right, 2=top(opposite), 3=left
-  const SLOT_CLASS  = ['slot-bottom','slot-right','slot-top','slot-left'];
-  const SLOT_ROT    = [0, 8, 0, -8]; // bottom/top straight, sides tilted
+  const isOnline = !!G.roomCode;
+  const isMyTurn = G.currentPlayer === mySeatIndex && !resolving && G.phase === 'play';
+  const playableIds = new Set((isMyTurn ? getPlayable(mySeatIndex) : []).map(c => c.id));
+  const selIds = new Set(G.selected.map(c => c.id));
+
+  // TABLE CENTER CARDS — diamond layout by relative seat position
+  // relPos: 0=bottom(me), 1=right, 2=top(opposite), 3=left
+  const slotClass  = ['slot-bottom','slot-right','slot-top','slot-left'];
+  const slotRot    = [0, 6, 0, -6];  // subtle rotations per slot
 
   let tableCards;
-  if (G.table.length === 0) {
-    tableCards = '';  // empty state handled by table-played-empty div below
+  if(G.table.length===0){
+    tableCards=`<div class="table-played-empty">Waiting for first card...</div>`;
   } else {
-    const slots = {};
-    G.table.forEach(t => {
-      const rel = (t.pi - mySeatIndex + 4) % 4;
-      const offsuit = G.leadColor && t.card.color !== G.leadColor;
-      slots[rel] = `<div class="played-slot ${SLOT_CLASS[rel]}">
+    const slots={};
+    G.table.forEach(t=>{
+      // Convert absolute seat index → relative visual position from this client's POV
+      const relPos=(t.pi - mySeatIndex + 4)%4;
+      const offsuit=G.leadColor&&t.card.color!==G.leadColor;
+      const rot=slotRot[relPos];
+      slots[relPos]=`<div class="played-slot ${slotClass[relPos]}">
         <span class="played-name">${pname(t.pi)}${offsuit?' ✦':''}</span>
-        <div class="table-card" style="transform:rotate(${SLOT_ROT[rel]}deg)">${cardEl(t.card,{offsuit})}</div>
+        <div class="table-card" style="transform:rotate(${rot}deg)">${cardEl(t.card,{offsuit})}</div>
       </div>`;
     });
-    tableCards = Object.values(slots).join('');
+    tableCards=Object.values(slots).join('');
   }
 
   // MY HAND — fan slightly
-  const myHand=G.hands[0];
+  const myHand=G.hands[mySeatIndex];
   const n=myHand.length;
   const handHTML=myHand.map((c,i)=>{
     const offset=n>1?(i/(n-1)-0.5)*Math.min(n*2,24):0;
@@ -746,33 +651,47 @@ function buildHTML(){
     return `<div class="avatar${active?' active':''}">${letter}</div>`;
   };
 
-  // timer ring (shown only on player's turn)
-  const isMyTurnNow=G.currentPlayer===0&&!resolving&&G.phase==='play';
+  // timer ring shown only on this client's turn
+  const isMyTurnNow=G.currentPlayer===mySeatIndex&&!resolving&&G.phase==='play';
   const myTimerId=isMyTurnNow?' id="turn-timer-ring"':'';
   const myTimerClass=isMyTurnNow?' timer-ring':'';
+
+  // Seat references relative to this client's perspective
+  const topSeat  = rel(2);   // opposite
+  const leftSeat = rel(3);   // to my left
+  const rightSeat= rel(1);   // to my right
+  const meSeat   = mySeatIndex;
+
+  // Avatar letter: host=H, real players use first letter of name, bots=B+num
+  const avatarLabel = i => {
+    const n = pname(i);
+    if (i === 0 && mySeatIndex === 0) return 'You';
+    if (i === mySeatIndex) return 'You';
+    return n.startsWith('Bot') ? n.replace('Bot ','B') : n.charAt(0).toUpperCase();
+  };
 
   return `
 <button class="back-arrow" onclick="backToMenu()" aria-label="Back to menu">&lsaquo;</button>
 <div id="table-wrap">
 
-  <!-- TOP: Bot 2 -->
+  <!-- TOP: seat opposite me -->
   <div class="tz-top2">
     <div class="player-zone">
-      ${av(2,'B2')}
-      <span class="pname">${pname(2)}</span>
-      <span class="pscore">${G.scores[2]}pts</span>
-      <div style="display:flex;margin-top:2px;width:120px;justify-content:center;overflow:hidden">${miniBackCards(G.hands[2].length)}</div>
+      ${av(topSeat, avatarLabel(topSeat))}
+      <span class="pname">${pname(topSeat)}</span>
+      <span class="pscore">${G.scores[topSeat]}pts</span>
+      <div style="display:flex;margin-top:2px;width:120px;justify-content:center;overflow:hidden">${miniBackCards(G.hands[topSeat].length)}</div>
     </div>
   </div>
 
-  <!-- LEFT: Bot 3 -->
+  <!-- LEFT: seat to my left -->
   <div class="tz-left">
     <div class="player-zone">
-      ${av(3,'B3')}
-      <span class="pname">${pname(3)}</span>
-      <span class="pscore">${G.scores[3]}pts</span>
+      ${av(leftSeat, avatarLabel(leftSeat))}
+      <span class="pname">${pname(leftSeat)}</span>
+      <span class="pscore">${G.scores[leftSeat]}pts</span>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:2px;min-height:80px">
-        ${Array(Math.min(G.hands[3].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
+        ${Array(Math.min(G.hands[leftSeat].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
       </div>
     </div>
   </div>
@@ -780,22 +699,20 @@ function buildHTML(){
   <!-- CENTER: table — diamond layout -->
   <div class="tz-mid">
     ${G.leadColor?`<div class="lead-chip">Lead: ${G.leadColor}</div>`:''}
-    ${G.table.length===0
-      ? `<div class="table-played-empty">Waiting for first card...</div>`
-      : `<div class="table-played">${tableCards}</div>`
-    }
+    <div class="table-played">${G.table.length===0?'':tableCards}</div>
+    ${G.table.length===0?`<div class="table-played-empty">Waiting for first card...</div>`:''}
     <div class="status-bar">${G.statusMsg}</div>
     ${G.botThought?`<div class="thought-chip">${G.botThought}</div>`:''}
   </div>
 
-  <!-- RIGHT: Bot 1 -->
+  <!-- RIGHT: seat to my right -->
   <div class="tz-right">
     <div class="player-zone">
-      ${av(1,'B1')}
-      <span class="pname">${pname(1)}</span>
-      <span class="pscore">${G.scores[1]}pts</span>
+      ${av(rightSeat, avatarLabel(rightSeat))}
+      <span class="pname">${pname(rightSeat)}</span>
+      <span class="pscore">${G.scores[rightSeat]}pts</span>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:2px;min-height:80px">
-        ${Array(Math.min(G.hands[1].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
+        ${Array(Math.min(G.hands[rightSeat].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
       </div>
     </div>
   </div>
@@ -803,17 +720,17 @@ function buildHTML(){
   <!-- BOTTOM: My area -->
   <div class="tz-btm">
     <div class="my-info">
-      ${av(0,'You')}
+      ${av(meSeat, 'You')}
       <div class="my-name-ring${myTimerClass}"${myTimerId}>
-        <span class="pname">${pname(0)}</span>
-        <span class="pscore">${G.scores[0]}pts</span>
+        <span class="pname">${pname(meSeat)}</span>
+        <span class="pscore">${G.scores[meSeat]}pts</span>
       </div>
     </div>
     <div id="my-hand">${handHTML}</div>
     <div style="display:flex;gap:8px;margin-top:4px">
       <button class="chip-btn" onclick="showRules()">Rules</button>
-<button class="chip-btn gold" onclick="createOnlineRoom()">Create Room</button>
-<button class="chip-btn" onclick="joinOnlineRoom()">Join Room</button>
+      ${!isOnline?`<button class="chip-btn gold" onclick="createOnlineRoom()">Create Room</button>
+<button class="chip-btn" onclick="joinOnlineRoom()">Join Room</button>`:''}
     </div>
   </div>
 
@@ -824,8 +741,22 @@ ${modal}`;
 
 // ── GIFT PHASE ────────────────────────────────────────────
 function buildGiftHTML(){
+  // Relative seat helper — same as play phase
+  const rel = n => (mySeatIndex + n) % 4;
+  const topSeat  = rel(2);
+  const leftSeat = rel(3);
+  const rightSeat= rel(1);
+  const meSeat   = mySeatIndex;
+
+  const avatarLabel = i => {
+    if (i === mySeatIndex) return 'You';
+    const n = pname(i);
+    return n.startsWith('Bot') ? n.replace('Bot ','B') : n.charAt(0).toUpperCase();
+  };
+
   const selSet=new Set(G.selected.map(c=>c.id));
-  const hand=G.hands[0];
+  const hand=G.hands[mySeatIndex];
+  const canSelectGift = !G.giftSubmitted;  // lock hand after submitting online
   const violation=G.selected.length>0&&giftViolatesColor(hand,G.selected);
   const n=hand.length;
   const handHTML=hand.map((c,i)=>{
@@ -836,7 +767,7 @@ function buildGiftHTML(){
     const ptag=p>0?`<span class="ptag">${p}</span>`:'';
     const cc=COLOR_CLASS[c.color];
     return `<div style="transform:rotate(${offset}deg) translateY(${yOff}px);transform-origin:bottom center;display:inline-block">
-      <div class="card ${cc}${sel?' selected':''}" data-gift="${c.id}" style="cursor:pointer">
+      <div class="card ${cc}${sel?' selected':''}" ${canSelectGift?`data-gift="${c.id}" style="cursor:pointer"`:'style="opacity:0.6"'}>
         ${ptag}
         <span class="corner tl">${lbl(c)}</span>
         <div class="cnum">${lbl(c)}</div>
@@ -846,28 +777,31 @@ function buildGiftHTML(){
     </div>`;
   }).join('');
 
+  // Gift goes to the player to my right (seat+1)
+  const giftTargetName = pname(rightSeat);
+
   return `
 <button class="back-arrow" onclick="backToMenu()" aria-label="Back to menu">&lsaquo;</button>
 <div id="table-wrap">
 
-  <!-- TOP: Bot 2 -->
+  <!-- TOP: seat opposite me -->
   <div class="tz-top2">
     <div class="player-zone">
-      <div class="avatar">B2</div>
-      <span class="pname">${pname(2)}</span>
-      <span class="pscore">${G.scores[2]}pts</span>
-      <div style="display:flex;margin-top:2px;width:120px;justify-content:center;overflow:hidden">${miniBackCards(G.hands[2].length)}</div>
+      <div class="avatar">${avatarLabel(topSeat)}</div>
+      <span class="pname">${pname(topSeat)}</span>
+      <span class="pscore">${G.scores[topSeat]}pts</span>
+      <div style="display:flex;margin-top:2px;width:120px;justify-content:center;overflow:hidden">${miniBackCards(G.hands[topSeat].length)}</div>
     </div>
   </div>
 
-  <!-- LEFT: Bot 3 -->
+  <!-- LEFT: seat to my left -->
   <div class="tz-left">
     <div class="player-zone">
-      <div class="avatar">B3</div>
-      <span class="pname">${pname(3)}</span>
-      <span class="pscore">${G.scores[3]}pts</span>
+      <div class="avatar">${avatarLabel(leftSeat)}</div>
+      <span class="pname">${pname(leftSeat)}</span>
+      <span class="pscore">${G.scores[leftSeat]}pts</span>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:2px;min-height:80px">
-        ${Array(Math.min(G.hands[3].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
+        ${Array(Math.min(G.hands[leftSeat].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
       </div>
     </div>
   </div>
@@ -875,20 +809,20 @@ function buildGiftHTML(){
   <!-- CENTER: gift instructions -->
   <div class="tz-mid">
     <div style="background:rgba(0,0,0,0.4);border-radius:14px;padding:10px 20px;text-align:center;border:1px solid rgba(255,255,255,0.1)">
-      <div style="color:rgba(255,220,100,0.9);font-size:13px;font-weight:600">Gift 3 cards to ${pname(1)}</div>
+      <div style="color:rgba(255,220,100,0.9);font-size:13px;font-weight:600">Gift 3 cards to ${giftTargetName}</div>
       <div style="color:rgba(255,255,255,0.6);font-size:11px;margin-top:2px">${G.selected.length}/3 selected</div>
       ${violation?`<div class="warn-chip" style="margin-top:6px">Warning: Holding Lee5a - can't empty a color</div>`:''}
     </div>
   </div>
 
-  <!-- RIGHT: Bot 1 -->
+  <!-- RIGHT: seat to my right -->
   <div class="tz-right">
     <div class="player-zone">
-      <div class="avatar">B1</div>
-      <span class="pname">${pname(1)}</span>
-      <span class="pscore">${G.scores[1]}pts</span>
+      <div class="avatar">${avatarLabel(rightSeat)}</div>
+      <span class="pname">${pname(rightSeat)}</span>
+      <span class="pscore">${G.scores[rightSeat]}pts</span>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px;margin-top:2px;min-height:80px">
-        ${Array(Math.min(G.hands[1].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
+        ${Array(Math.min(G.hands[rightSeat].length,8)).fill(0).map((_,i)=>`<div class="mini-back-v" style="margin-bottom:-8px;z-index:${i}"></div>`).join('')}
       </div>
     </div>
   </div>
@@ -897,13 +831,16 @@ function buildGiftHTML(){
   <div class="tz-btm">
     <div class="my-info">
       <div class="avatar">You</div>
-      <span class="pname">${pname(0)}</span>
-      <span class="pscore">${G.scores[0]}pts</span>
+      <span class="pname">${pname(meSeat)}</span>
+      <span class="pscore">${G.scores[meSeat]}pts</span>
     </div>
     <div id="my-hand">${handHTML}</div>
-    <button class="chip-btn gold" onclick="confirmGift()" ${G.selected.length!==3||violation?'disabled':''}>
-      Gift selected ->
-    </button>
+    ${G.giftSubmitted
+      ? `<div class="room-msg" style="margin-top:6px">Waiting for other players to gift…</div>`
+      : `<button class="chip-btn gold" onclick="confirmGift()" ${G.selected.length!==3||violation?'disabled':''}>
+           Gift selected ->
+         </button>`
+    }
   </div>
 
 </div>`;
@@ -938,7 +875,14 @@ function buildModal(){
     ${isEnd?`<div style="color:#ff6666;font-size:12px;text-align:center;margin-bottom:8px">${names[loserIdx]} reached 101+!</div>`:''}
     <div class="modal-rows">${rows}</div>
     <div style="display:flex;justify-content:center;margin-top:12px">
-      ${isEnd?`<button class="chip-btn gold" onclick="newGame()">New Game</button>`:`<button class="chip-btn gold" onclick="nextRound()">Next Round</button>`}
+      ${isEnd
+        ? `<button class="chip-btn gold" onclick="newGame()">New Game</button>`
+        : G.roomCode
+          ? (G.isHost
+              ? `<button class="chip-btn gold" onclick="hostNextRound()">Next Round →</button>`
+              : `<div style="font-size:12px;color:rgba(255,255,255,0.5);padding:6px 0">Waiting for host to start next round…</div>`)
+          : `<button class="chip-btn gold" onclick="nextRound()">Next Round</button>`
+      }
     </div>
   </div></div>`;
 }
@@ -956,15 +900,17 @@ function attachEvents(){
   });
   document.querySelectorAll('[data-play]').forEach(el=>{
     el.addEventListener('click',()=>{
-      if(G.currentPlayer!==mySeatIndex||resolving)return;
+      if(G.currentPlayer!==mySeatIndex||resolving||G.trickResolving)return;
       const id=el.dataset.play;
       const card=G.hands[mySeatIndex].find(c=>c.id===id);
       if(!card)return;
       if(!getPlayable(mySeatIndex).find(c=>c.id===card.id))return;
-      playCardDropSound();
+
       if(G.roomCode){
+        // Online: send to server; server will broadcast gameState to everyone
         socket.emit('playCard',{roomCode:G.roomCode,cardId:id});
       } else {
+        // Local Quick Play: run the full local engine
         executePlay(mySeatIndex,card);
       }
     });
@@ -974,7 +920,6 @@ function attachEvents(){
 // ── TIMER ────────────────────────────────────────────────
 function startTimer(){
   stopTimer();
-  playYourTurnSound();
   turnTimeLeft=20;
   updateTimerBar();
   turnTimer=setInterval(()=>{
@@ -982,9 +927,15 @@ function startTimer(){
     updateTimerBar();
     if(turnTimeLeft<=0){
       stopTimer();
-      // auto-play: pick first playable card
-      const pl=getPlayable(0);
-      if(pl.length)executePlay(0,pl[0]);
+      // auto-play: pick first playable card for this client's seat
+      const pl=getPlayable(mySeatIndex);
+      if(pl.length){
+        if(G.roomCode){
+          socket.emit('playCard',{roomCode:G.roomCode,cardId:pl[0].id});
+        } else {
+          executePlay(mySeatIndex,pl[0]);
+        }
+      }
     }
   },1000);
 }
@@ -1172,10 +1123,27 @@ function buildRoomLobbyHTML(){
 }
 
 window.confirmGift=function(){
-  if(G.selected.length!==3||giftViolatesColor(G.hands[0],G.selected))return;
+  const hand=G.hands[mySeatIndex];
+  if(G.selected.length!==3||giftViolatesColor(hand,G.selected))return;
+  if(G.roomCode){
+    // Online: send to server; server applies all gifts and broadcasts play phase
+    socket.emit('submitGift',{roomCode:G.roomCode,cardIds:G.selected.map(c=>c.id)});
+    G.giftSubmitted=true;
+    G.roomMsg='Waiting for other players to gift…';
+    G.selected=[];
+    render();
+    return;
+  }
+  // Local Quick Play
   G.gifts[0]=[...G.selected];setTimeout(doGifts,300);
 };
 window.nextRound=function(){G.modal=null;newRound();};
+window.hostNextRound=function(){
+  if(!G.roomCode)return;
+  socket.emit('startNextRound',{roomCode:G.roomCode});
+  G.modal=null;
+  render();
+};
 window.newGame=function(){initGame();};
 window.showRules=function(){G.modal={type:'rules'};render();};
 window.closeModal=function(){G.modal=null;render();};
