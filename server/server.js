@@ -477,6 +477,11 @@ function playCardForSeat(roomCode, seatIndex, cardId) {
       const roundOver = leesOnTable === 2 || g.hands.every(h => h.length === 0);
 
       if (roundOver) {
+        // Both-lee rule: the trick winner keeps their accumulated roundPts;
+        // all other players' round points are wiped to 0.
+        if (leesOnTable === 2) {
+          g.roundPts = g.roundPts.map((p, i) => i === wi ? p : 0);
+        }
         g.scores = g.scores.map((sc, i) => sc + (g.roundPts[i] || 0));
         const maxScore = Math.max(...g.scores);
         const gameOver = maxScore >= 101;

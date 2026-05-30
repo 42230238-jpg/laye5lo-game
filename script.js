@@ -171,23 +171,34 @@ socket.on("gameState", (data) => {
   }
 
   // Online sound: detect newly played card by comparing table lengths.
+  // Works even when the new card triggers roundEnd (gs.phase changes to 'roundEnd').
   // Skip if the new card was played by THIS client (already fired on click).
-  if (G.phase === 'play' && gs.phase === 'play') {
+  if (G.phase === 'play') {
     const prevTableLen = G.table ? G.table.length : 0;
+    // gs.table may be empty if the round just ended; use playedCards as fallback
+    const gsTable = gs.table && gs.table.length > 0 ? gs.table
+      : (gs.playedCards && gs.playedCards.length > (G.playedCards ? G.playedCards.length : 0)
+          ? null : null);
     const newTableLen = gs.table ? gs.table.length : 0;
-    if (newTableLen > prevTableLen) {
-      const lastEntry = gs.table[gs.table.length - 1];
+    // A card was added if table grew, OR table reset to 0 (trick finished) but playedCards grew
+    const cardAdded = newTableLen > prevTableLen
+      || (newTableLen === 0 && prevTableLen > 0 && gs.playedCards && G.playedCards
+          && gs.playedCards.length > G.playedCards.length);
+    if (cardAdded) {
+      // Identify the latest played card
+      let lastEntry = newTableLen > prevTableLen && gs.table.length > 0
+        ? gs.table[gs.table.length - 1]
+        : (gs.playedCards && gs.playedCards.length ? { pi: -1, card: gs.playedCards[gs.playedCards.length - 1] } : null);
       const playedByMe = lastEntry && lastEntry.pi === data.mySeatIndex;
       if (!playedByMe) {
-        // Someone else played — play the card sound for all listeners
+        // Someone else played — play card sound + optional lee voice
         SFX.playCardPlay();
         if (lastEntry && isLee(lastEntry.card)) {
           setTimeout(() => SFX.playLee(), 120);
         }
-      } else if (lastEntry && isLee(lastEntry.card)) {
-        // My own lee: sound already fired on click, but play voice for OTHER clients.
-        // (This branch intentionally left empty — sound was already played on click.)
       }
+      // My own card: sound already fired on click.
+      // But if it was MY own lee that ended the round, the voice already played too.
     }
   }
 
@@ -602,10 +613,12 @@ function finishTrick(){
   const leeCount=tCards.filter(c=>isLee(c)).length;
   const blueDraw2Taken=tCards.some(c=>c.color==='blue'&&c.type==='draw2');
   if(blueDraw2Taken)nextRoundStarter=rightOf(wi);
-  // Both-lee trick: 37 flat + any red cards played on that same trick
+  // Both-lee trick: winner gets 37 pts (+ any reds in that trick);
+  // all other players' accumulated round points are wiped to 0.
   let p=tCards.reduce((s,c)=>s+pts(c),0);
   if(leeCount===2)p=37+tCards.filter(c=>c.color==='red').reduce((s,c)=>s+pts(c),0);
   G.roundPts[wi]+=p;
+  if(leeCount===2)G.roundPts=G.roundPts.map((v,i)=>i===wi?v:0);
   G.statusMsg=leeCount===2?`${pname(wi)} took both Lee5as! +${p} pts - round over!`:`${pname(wi)} wins trick${p>0?' (+'+p+'pts)':''}`;
   G.table=[];G.leadColor=null;
   if(leeCount===2){endRound();return;}
