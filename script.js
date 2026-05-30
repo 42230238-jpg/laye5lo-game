@@ -699,8 +699,10 @@ function buildHTML(){
   <!-- CENTER: table — diamond layout -->
   <div class="tz-mid">
     ${G.leadColor?`<div class="lead-chip">Lead: ${G.leadColor}</div>`:''}
-    <div class="table-played">${G.table.length===0?'':tableCards}</div>
-    ${G.table.length===0?`<div class="table-played-empty">Waiting for first card...</div>`:''}
+    ${G.table.length===0
+      ? `<div class="table-played-empty">Waiting for first card...</div>`
+      : `<div class="table-played">${tableCards}</div>`
+    }
     <div class="status-bar">${G.statusMsg}</div>
     ${G.botThought?`<div class="thought-chip">${G.botThought}</div>`:''}
   </div>
@@ -1253,6 +1255,7 @@ window.createOnlineRoom = function () {
 
 window.joinOnlineRoom = function () {
   // Navigate to the join-room input screen
+  G.phase = 'customRoom';
   G.roomMode = 'join';
   G.joinCode = '';
   G.roomMsg = '';
