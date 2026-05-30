@@ -605,13 +605,17 @@ function scheduleBotPlay(roomCode) {
         room.game.gifts[idx] = chooseSimpleGift(room.game.hands[idx]);
       }
     });
-    // If all bots (shouldn't happen in a real game but just in case)
+    // If all gifts are already ready (e.g. all seats are bots), transition to play immediately
     if (room.game.gifts.every(Boolean)) {
       applyGifts(room.game);
       room.game.phase = 'play';
       room.game.currentPlayer = 0;
       room.game.statusMsg = `${room.game.playerNames[0]}'s turn`;
       broadcastGameState(roomCode);
+      // Kick off bot play if seat 0 is a bot
+      if (isBotSeat(room, 0)) {
+        setTimeout(() => scheduleBotPlay(roomCode), 750);
+      }
     }
   });
 

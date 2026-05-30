@@ -1,6 +1,74 @@
 const BACKEND_URL = "https://laye5lo-game.onrender.com";
 const socket = io(BACKEND_URL);
 
+// ── SOUND SYSTEM ─────────────────────────────────────────────
+const SFX = (() => {
+  // Pre-load the 5 lee5a voice clips
+  const leeSounds = [1,2,3,4,5].map(n => {
+    const a = new Audio(`sounds/lee5a-${n}.m4a`);
+    a.preload = 'auto';
+    return a;
+  });
+
+  // Simple synthesised sound-effects using the Web Audio API
+  let ctx = null;
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    return ctx;
+  }
+
+  function playTone(freq, type, duration, gain=0.18, delay=0) {
+    try {
+      const ac = getCtx();
+      const osc = ac.createOscillator();
+      const gainNode = ac.createGain();
+      osc.connect(gainNode);
+      gainNode.connect(ac.destination);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ac.currentTime + delay);
+      gainNode.gain.setValueAtTime(0, ac.currentTime + delay);
+      gainNode.gain.linearRampToValueAtTime(gain, ac.currentTime + delay + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + delay + duration);
+      osc.start(ac.currentTime + delay);
+      osc.stop(ac.currentTime + delay + duration + 0.05);
+    } catch(e) {}
+  }
+
+  // Play a random lee5a voice clip
+  function playLee() {
+    const idx = Math.floor(Math.random() * leeSounds.length);
+    const snd = leeSounds[idx];
+    snd.currentTime = 0;
+    snd.play().catch(()=>{});
+  }
+
+  // Card-play whoosh: quick descending sweep
+  function playCardPlay() {
+    try {
+      const ac = getCtx();
+      const osc = ac.createOscillator();
+      const gainNode = ac.createGain();
+      osc.connect(gainNode);
+      gainNode.connect(ac.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, ac.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(200, ac.currentTime + 0.18);
+      gainNode.gain.setValueAtTime(0.14, ac.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.22);
+      osc.start(ac.currentTime);
+      osc.stop(ac.currentTime + 0.25);
+    } catch(e) {}
+  }
+
+  // Your-turn chime: two quick ascending notes
+  function playMyTurn() {
+    playTone(520, 'sine', 0.12, 0.13, 0);
+    playTone(780, 'sine', 0.18, 0.10, 0.13);
+  }
+
+  return { playLee, playCardPlay, playMyTurn };
+})();
+
 socket.on("connect", () => {
   console.log("Connected to multiplayer server:", socket.id);
 });
@@ -94,6 +162,27 @@ socket.on("gameState", (data) => {
     giftSubmitted: gs.phase === 'gift' ? (G.giftSubmitted || false) : false,
     roomMsg: gs.phase === 'gift' ? (G.roomMsg || '') : ''
   };
+
+  // Online sound: my-turn chime when currentPlayer becomes me
+  if (G.phase === 'play' && gs.phase === 'play') {
+    if (gs.currentPlayer === data.mySeatIndex && G.currentPlayer !== data.mySeatIndex) {
+      SFX.playMyTurn();
+    }
+  }
+
+  // Online sound: detect newly played lee card by comparing table lengths
+  if (G.phase === 'play' && gs.phase === 'play') {
+    const prevTableLen = G.table ? G.table.length : 0;
+    const newTableLen = gs.table ? gs.table.length : 0;
+    if (newTableLen > prevTableLen) {
+      // A new card was played
+      SFX.playCardPlay();
+      const lastEntry = gs.table[gs.table.length - 1];
+      if (lastEntry && isLee(lastEntry.card)) {
+        setTimeout(() => SFX.playLee(), 120);
+      }
+    }
+  }
 
   // When transitioning gift→play, highlight the incoming gift cards for this seat
   if (wasGift && nowPlay) {
@@ -292,6 +381,9 @@ function getPlayable(idx){
 }
 
 function executePlay(pi,card,reason=''){
+  // Sound effects
+  SFX.playCardPlay();
+  if(isLee(card)) setTimeout(()=>SFX.playLee(), 120);
   stopTimer();
   G.botThought=pi!==0&&reason?`${pname(pi)} chose ${lbl(card)} because ${reason}.`:'';
   if(!G.playedCards)G.playedCards=[];
@@ -547,7 +639,10 @@ function doGifts(){
   setStatus();render();
   // clear glow after 5 seconds
   setTimeout(()=>{giftedIds=new Set();render();},5000);
-  startTimer();
+  // Only start the human turn-timer when it's actually our turn.
+  // If a bot starts the round, schedule its play instead.
+  if(G.currentPlayer===mySeatIndex){startTimer();}
+  else{setTimeout(aiPlay,720);}
 }
 
 function aiPlay(){
@@ -908,6 +1003,8 @@ function attachEvents(){
 
       if(G.roomCode){
         // Online: send to server; server will broadcast gameState to everyone
+        SFX.playCardPlay();
+        if(isLee(card)) setTimeout(()=>SFX.playLee(), 120);
         socket.emit('playCard',{roomCode:G.roomCode,cardId:id});
       } else {
         // Local Quick Play: run the full local engine
@@ -919,6 +1016,7 @@ function attachEvents(){
 
 // ── TIMER ────────────────────────────────────────────────
 function startTimer(){
+  SFX.playMyTurn();
   stopTimer();
   turnTimeLeft=20;
   updateTimerBar();
