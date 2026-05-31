@@ -179,17 +179,18 @@ const ANIM = (() => {
     el.innerHTML=`<div class="fly-label">${lbl}</div><div class="fly-sym">${card.color}</div>`;
     document.body.appendChild(el);
 
-    // Two rAF frames to ensure the browser paints the start position before transitioning
+    // Two rAF frames: first paints start position, second triggers transition
     requestAnimationFrame(()=>{
       requestAnimationFrame(()=>{
         el.style.opacity='1';
         el.style.left=`${toX-27}px`;
         el.style.top=`${toY-41}px`;
-        // Fade out just before the transition ends
+        // onDone fires when card reaches destination (matches transition duration)
         setTimeout(()=>{
+          if(onDone) onDone();
           el.style.opacity='0';
-          setTimeout(()=>{ el.remove(); if(onDone)onDone(); },140);
-        },280);
+          setTimeout(()=>el.remove(), 150);
+        },320);
       });
     });
   }
@@ -359,14 +360,22 @@ socket.on("gameState", (data) => {
         if (lastEntry && isLee(lastEntry.card)) {
           setTimeout(() => SFX.playLee(), 120);
         }
-        // Fly animation for opponent's card
+        // Fly animation for opponent's card — target the exact rendered slot
         if (lastEntry && lastEntry.pi !== undefined && lastEntry.pi >= 0) {
           const pi = lastEntry.pi;
           const relPos = (pi - data.mySeatIndex + 4) % 4;
           const avatarSels = ['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
+          const slotClasses = ['slot-bottom','slot-right','slot-top','slot-left'];
           const fromPt = ANIM.center(avatarSels[relPos]) || {x:window.innerWidth/2,y:window.innerHeight/2};
-          const toPt = ANIM.center('.tz-mid') || {x:window.innerWidth/2,y:window.innerHeight/2};
-          ANIM.flyCard(lastEntry.card, fromPt.x, fromPt.y, toPt.x, toPt.y, null);
+          // Hide the slot, read its position, fly to it, then reveal
+          const slotEl = document.querySelector('.'+slotClasses[relPos]);
+          if(slotEl) slotEl.style.opacity='0';
+          const toPt = slotEl
+            ? (()=>{const r=slotEl.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};})()
+            : ANIM.center('.tz-mid') || {x:window.innerWidth/2,y:window.innerHeight/2};
+          ANIM.flyCard(lastEntry.card, fromPt.x, fromPt.y, toPt.x, toPt.y, ()=>{
+            if(slotEl) slotEl.style.opacity='';
+          });
         }
       }
       // My own card: sound + fly already fired on click.
@@ -579,33 +588,49 @@ function executePlay(pi,card,reason=''){
   stopTimer();
   G.botThought=pi!==0&&reason?`${pname(pi)} chose ${lbl(card)} because ${reason}.`:'';
 
-  // ── Fly animation: capture positions before state changes ──
-  const relPos=(pi-mySeatIndex+4)%4;  // 0=me,1=right,2=top,3=left
-  const avatarSel=['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'][relPos];
-  const slotSel=['.slot-bottom','.slot-right','.slot-top','.slot-left'][relPos];
-  const fromPt=ANIM.center(avatarSel)||{x:window.innerWidth/2,y:window.innerHeight/2};
-  // target = existing slot if present, else center of tz-mid
-  const toPt=ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
-  ANIM.flyCard(card, fromPt.x, fromPt.y, toPt.x, toPt.y, null);
+  // ── Fly animation ────────────────────────────────────────
+  // 1. Capture avatar start position BEFORE render changes the DOM
+  const relPos=(pi-mySeatIndex+4)%4;
+  const avatarSels=['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
+  const slotClasses=['slot-bottom','slot-right','slot-top','slot-left'];
+  const fromPt=ANIM.center(avatarSels[relPos])||{x:window.innerWidth/2,y:window.innerHeight/2};
 
+  // 2. Update game state
   if(!G.playedCards)G.playedCards=[];
   G.playedCards.push(card);
   G.table.push({pi,card});
   G.hands[pi]=sortHand(G.hands[pi].filter(c=>c.id!==card.id));
   if(!G.leadColor)G.leadColor=card.color;
   G.selected=[];
-  if(hasBothLees(G.table)||G.table.length===4||!hasNextTrickPlayer(G.currentPlayer)){
-    resolving=true;G.statusMsg=hasBothLees(G.table)?'Both Lee5as taken! Round ends now.':'Trick complete...';
-    setTimeout(()=>{ render(); setTimeout(finishTrick,1150); },200);
+  const trickDone=hasBothLees(G.table)||G.table.length===4||!hasNextTrickPlayer(G.currentPlayer);
+  if(trickDone){
+    resolving=true;
+    G.statusMsg=hasBothLees(G.table)?'Both Lee5as taken! Round ends now.':'Trick complete...';
   } else {
     G.currentPlayer=nextTrickP(G.currentPlayer);
     setStatus();
-    setTimeout(()=>{
-      render();
-      if(G.currentPlayer===mySeatIndex){startTimer();}
-      else{setTimeout(aiPlay,480);}
-    },200);
   }
+
+  // 3. Render so the slot exists in DOM, then hide it until the fly card lands
+  render();
+  const slotEl=document.querySelector('.'+slotClasses[relPos]);
+  if(slotEl) slotEl.style.opacity='0';
+
+  // 4. Read the exact rendered slot center as the fly target
+  const toPt=slotEl
+    ?(()=>{const r=slotEl.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};})()
+    :ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
+
+  // 5. Fly to that exact position; reveal slot on landing
+  ANIM.flyCard(card, fromPt.x, fromPt.y, toPt.x, toPt.y, ()=>{
+    if(slotEl) slotEl.style.opacity='';
+    if(trickDone){
+      setTimeout(finishTrick,900);
+    } else {
+      if(G.currentPlayer===mySeatIndex){startTimer();}
+      else{setTimeout(aiPlay,300);}
+    }
+  });
 }
 function nextP(p){return(p+1)%4;}
 function nextActiveP(p){
@@ -1236,8 +1261,10 @@ function attachEvents(){
         // Online: send to server; server will broadcast gameState to everyone
         SFX.playCardPlay();
         if(isLee(card)) setTimeout(()=>SFX.playLee(), 120);
-        // Fly from my avatar to center
+        // Fly from my avatar to the exact slot that will render
         const _fp=ANIM.center('.tz-btm .avatar')||{x:window.innerWidth/2,y:window.innerHeight*0.8};
+        // slot-bottom is where my card lands; read it after the next gameState render
+        // For now fly to tz-mid center — online slot position read in gameState handler
         const _tp=ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
         ANIM.flyCard(card,_fp.x,_fp.y,_tp.x,_tp.y,null);
         socket.emit('playCard',{roomCode:G.roomCode,cardId:id});
