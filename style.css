@@ -492,8 +492,11 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   align-items:center;justify-content:center;
   box-shadow:4px 8px 24px rgba(0,0,0,0.7);
   pointer-events:none;z-index:300;
-  will-change:transform,opacity;
-  transition:transform 0.38s cubic-bezier(.22,.68,.6,1.2), opacity 0.38s ease;
+  /* Use left/top transitions only — avoids transform overshoot */
+  will-change:left,top,opacity;
+  transition:left 0.32s cubic-bezier(.4,0,.2,1),
+             top  0.32s cubic-bezier(.4,0,.2,1),
+             opacity 0.18s ease;
 }
 .fly-card.fly-active{opacity:1}
 .fly-card.fly-done{opacity:0;transition:opacity 0.12s ease}

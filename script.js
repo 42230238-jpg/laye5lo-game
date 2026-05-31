@@ -174,20 +174,22 @@ const ANIM = (() => {
     const cc=colorClass(card.color);
     const el=document.createElement('div');
     el.className=`fly-card ${cc}`;
-    // start position (centered on the card)
-    el.style.cssText=`left:${fromX-27}px;top:${fromY-41}px;opacity:0;transform:scale(0.7) rotate(${(Math.random()-0.5)*20}deg)`;
+    // Place at start — no transform, just left/top so transition is a clean straight line
+    el.style.cssText=`left:${fromX-27}px;top:${fromY-41}px;opacity:0;`;
     el.innerHTML=`<div class="fly-label">${lbl}</div><div class="fly-sym">${card.color}</div>`;
     document.body.appendChild(el);
 
-    // Trigger start (force reflow first)
+    // Two rAF frames to ensure the browser paints the start position before transitioning
     requestAnimationFrame(()=>{
       requestAnimationFrame(()=>{
         el.style.opacity='1';
-        el.style.transform=`translate(${toX-fromX}px,${toY-fromY}px) scale(1) rotate(0deg)`;
+        el.style.left=`${toX-27}px`;
+        el.style.top=`${toY-41}px`;
+        // Fade out just before the transition ends
         setTimeout(()=>{
           el.style.opacity='0';
           setTimeout(()=>{ el.remove(); if(onDone)onDone(); },140);
-        },360);
+        },280);
       });
     });
   }
