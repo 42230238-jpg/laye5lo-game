@@ -57,6 +57,7 @@ const SFX = (() => {
       gainNode.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.22);
       osc.start(ac.currentTime);
       osc.stop(ac.currentTime + 0.25);
+      updateHandResponsiveness();
     } catch(e) {}
   }
 
@@ -64,6 +65,7 @@ const SFX = (() => {
   function playMyTurn() {
     playTone(520, 'sine', 0.12, 0.13, 0);
     playTone(780, 'sine', 0.18, 0.10, 0.13);
+    updateHandResponsiveness();
   }
 
   return { playLee, playCardPlay, playMyTurn };
@@ -255,6 +257,7 @@ socket.on("roomCreated", (data) => {
   };
 
   render();
+  updateHandResponsiveness();
 });
 
 socket.on("roomUpdated", (data) => {
@@ -276,6 +279,7 @@ socket.on("roomUpdated", (data) => {
   };
 
   render();
+  updateHandResponsiveness();
 });
 
 socket.on("gameStarted", (data) => {
@@ -298,6 +302,7 @@ socket.on("gameStarted", (data) => {
   };
 
   render();
+  updateHandResponsiveness();
 });
 
 // Live game state pushed after submitGift or playCard
@@ -397,12 +402,14 @@ socket.on("gameState", (data) => {
   }
 
   render();
+  updateHandResponsiveness();
 });
 
 socket.on("lobbyError", (message) => {
   console.warn("Lobby error:", message);
   G.roomMsg = message;
   render();
+  updateHandResponsiveness();
 });
 
 // Maps server seats array (4-slot, nulls for empty) to G.roomPlayers format
@@ -613,6 +620,7 @@ function executePlay(pi,card,reason=''){
 
   // 3. Render so the slot exists in DOM, then hide it until the fly card lands
   render();
+  updateHandResponsiveness();
   const slotEl=document.querySelector('.'+slotClasses[relPos]);
   if(slotEl) slotEl.style.opacity='0';
 
@@ -844,7 +852,8 @@ function finishTrick(){
   const _winSels=['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
   const _winPt=ANIM.center(_winSels[_winRp])||{x:window.innerWidth/2,y:window.innerHeight/2};
   G.table=[];G.leadColor=null;
-  render(); // clear table visually before sweep
+  render(); 
+  updateHandResponsiveness();// clear table visually before sweep
   ANIM.sweepTrick(_slotRects,_winPt.x,_winPt.y,()=>{
     if(leeCount===2){endRound();return;}
     if(G.hands.every(h=>h.length===0)){endRound();return;}
@@ -884,6 +893,7 @@ function doGifts(){
   // mark incoming cards for glow
   giftedIds=new Set(incomingGift.map(c=>c.id));
   setStatus();render();
+  updateHandResponsiveness();
   // clear glow after 5 seconds
   setTimeout(()=>{giftedIds=new Set();render();},5000);
   // Only start the human turn-timer when it's actually our turn.
@@ -1247,6 +1257,7 @@ function attachEvents(){
       const idx=G.selected.findIndex(c=>c.id===id);
       if(idx>=0)G.selected.splice(idx,1);else if(G.selected.length<3)G.selected.push(card);
       render();
+      updateHandResponsiveness();
     });
   });
   document.querySelectorAll('[data-play]').forEach(el=>{
@@ -1492,6 +1503,7 @@ window.confirmGift=function(){
     G.roomMsg='Waiting for other players to gift…';
     G.selected=[];
     render();
+    updateHandResponsiveness();
     return;
   }
   // Local Quick Play
@@ -1503,6 +1515,7 @@ window.hostNextRound=function(){
   socket.emit('startNextRound',{roomCode:G.roomCode});
   G.modal=null;
   render();
+  updateHandResponsiveness();
 };
 window.newGame=function(){initGame();};
 window.showRules=function(){G.modal={type:'rules'};render();};
@@ -1516,6 +1529,7 @@ window.showJoinRoom=function(){G.roomMode='join';G.joinCode='';G.roomMsg='';rend
 window.enterRoomLobby=function(){
   G={phase:'roomLobby',modal:null,roomCode:G.roomCode||makeRoomCode(),roomMsg:'',roomPlayers:defaultRoomPlayers()};
   render();
+  updateHandResponsiveness();
 };
 window.joinCustomRoom=function(){
   const input=document.getElementById('join-room-code');
@@ -1595,6 +1609,7 @@ window.copyRoomCode=function(){
   } else {
     G.roomMsg='Select the code manually.';
     render();
+    updateHandResponsiveness();
   }
 };
 
@@ -1618,4 +1633,30 @@ window.joinOnlineRoom = function () {
   G.joinCode = '';
   G.roomMsg = '';
   render();
+  updateHandResponsiveness();
 };
+function updateHandResponsiveness() {
+  const hand = document.getElementById("my-hand");
+  if (!hand) return;
+
+  const cards = hand.querySelectorAll(".card");
+  const count = cards.length || 1;
+
+  hand.style.setProperty("--hand-count", count);
+
+  hand.classList.toggle("many-cards", count >= 9);
+  hand.classList.toggle("too-many-cards", count >= 12);
+}
+
+window.addEventListener("resize", updateHandResponsiveness);
+window.addEventListener("orientationchange", updateHandResponsiveness);
+
+const handObserver = new MutationObserver(updateHandResponsiveness);
+
+window.addEventListener("DOMContentLoaded", () => {
+  const hand = document.getElementById("my-hand");
+  if (hand) {
+    handObserver.observe(hand, { childList: true, subtree: true });
+    updateHandResponsiveness();
+  }
+});
