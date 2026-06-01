@@ -534,3 +534,198 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   background:repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px);
 }
 .deal-card.deal-done{opacity:0}
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE — all breakpoints
+   Strategy: scale down card sizes, grid columns, fonts, and
+   spacing. No layout logic is touched — only dimensions.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── TABLET  (≤ 768px) ── */
+@media (max-width: 768px) {
+  #game {
+    border-radius: 12px;
+    padding: 8px 6px 6px;
+    min-height: 540px;
+  }
+
+  /* Cards */
+  .card {
+    width: 46px; height: 70px;
+    font-size: 15px; border-radius: 7px;
+  }
+  .card .cnum  { font-size: 17px }
+  .card .csym  { font-size: 8px }
+  .card .corner{ font-size: 9px }
+  .card .ptag  { font-size: 7px }
+
+  /* Selected / hover lifts */
+  .card.selected   { transform: translateY(-14px) !important }
+  .card.playable:hover { transform: translateY(-10px) }
+
+  /* Table layout grid */
+  #table-wrap {
+    grid-template-rows: 100px 1fr 176px;
+    grid-template-columns: 62px 1fr 62px;
+    min-height: 440px;
+    gap: 3px;
+  }
+  .tz-top2 .player-zone { height: 96px }
+  .tz-left .player-zone,
+  .tz-right .player-zone { height: 130px }
+
+  /* My hand */
+  #my-hand {
+    height: 78px;
+    gap: 2px;
+  }
+
+  /* Diamond play area */
+  .table-played,
+  .table-played-empty { width: 190px; height: 190px }
+
+  /* Avatars */
+  .avatar { width: 36px; height: 36px; font-size: 11px }
+  .my-name-ring { width: 50px; height: 50px }
+
+  /* Mini backs */
+  .mini-back   { width: 18px; height: 28px }
+  .mini-back-v { width: 22px; height: 16px }
+
+  /* Status bar */
+  .status-bar  { font-size: 11px; padding: 4px 12px; min-width: 170px }
+  .thought-chip{ font-size: 9px; max-width: 220px }
+
+  /* Menu */
+  .menu-mark h1,
+  .room-panel h1 { font-size: 30px }
+
+  /* Fly / sweep animation cards */
+  .fly-card   { width: 46px; height: 70px; font-size: 15px }
+  .sweep-card { width: 46px; height: 70px }
+}
+
+/* ── LARGE PHONE  (≤ 540px) ── */
+@media (max-width: 540px) {
+  #game {
+    border-radius: 10px;
+    padding: 6px 4px 4px;
+    min-height: 480px;
+  }
+
+  .card {
+    width: 40px; height: 60px;
+    font-size: 13px; border-radius: 6px;
+  }
+  .card .cnum  { font-size: 14px }
+  .card .csym  { font-size: 7px }
+  .card .corner{ font-size: 8px }
+  .card .ptag  { font-size: 6px; padding: 1px 2px }
+  .card::before{ inset: 1px; border-radius: 5px }
+
+  .card.selected       { transform: translateY(-12px) !important }
+  .card.playable:hover { transform: translateY(-8px) }
+
+  #table-wrap {
+    grid-template-rows: 88px 1fr 156px;
+    grid-template-columns: 54px 1fr 54px;
+    min-height: 380px;
+    gap: 2px;
+  }
+  .tz-top2 .player-zone { height: 84px }
+  .tz-left .player-zone,
+  .tz-right .player-zone { height: 110px }
+
+  #my-hand {
+    height: 66px;
+    gap: 1px;
+  }
+
+  .table-played,
+  .table-played-empty { width: 162px; height: 162px }
+
+  .avatar { width: 30px; height: 30px; font-size: 10px }
+  .my-name-ring { width: 44px; height: 44px }
+  .pname  { font-size: 9px }
+  .pscore { font-size: 9px }
+
+  .mini-back   { width: 15px; height: 23px; margin-right: -6px }
+  .mini-back-v { width: 19px; height: 13px; margin-bottom: -6px }
+
+  .status-bar  { font-size: 10px; padding: 4px 10px; min-width: 140px }
+  .lead-chip   { font-size: 9px; padding: 2px 8px }
+  .thought-chip{ font-size: 8px; max-width: 180px; padding: 3px 8px }
+
+  .menu-mark h1,
+  .room-panel h1 { font-size: 26px }
+  .menu-mark p,
+  .room-panel p  { font-size: 12px }
+  .menu-btn { height: 38px; font-size: 13px }
+
+  .side-opp.left  { left: 2px }
+  .side-opp.right { right: 2px }
+
+  .fly-card   { width: 40px; height: 60px; font-size: 13px }
+  .sweep-card { width: 40px; height: 60px }
+  .deal-card  { width: 32px; height: 48px }
+
+  /* Shuffle overlay deck */
+  #shuffle-deck { width: 48px; height: 72px }
+  #shuffle-label{ font-size: 11px; margin-top: 12px }
+
+  /* Modal */
+  .modal-box  { width: calc(100% - 24px); padding: 16px }
+  .modal-box h3{ font-size: 14px }
+}
+
+/* ── SMALL PHONE  (≤ 380px) ── */
+@media (max-width: 380px) {
+  #game { min-height: 420px; padding: 4px 2px 2px }
+
+  .card {
+    width: 34px; height: 52px;
+    font-size: 11px; border-radius: 5px;
+  }
+  .card .cnum  { font-size: 12px }
+  .card .csym  { display: none }   /* hide suit label at tiny sizes */
+  .card .corner{ font-size: 7px }
+  .card .ptag  { display: none }   /* hide partner tag, too cramped */
+
+  .card.selected       { transform: translateY(-10px) !important }
+  .card.playable:hover { transform: translateY(-7px) }
+
+  #table-wrap {
+    grid-template-rows: 76px 1fr 136px;
+    grid-template-columns: 46px 1fr 46px;
+    min-height: 320px;
+  }
+  .tz-top2 .player-zone { height: 72px }
+  .tz-left .player-zone,
+  .tz-right .player-zone { height: 92px }
+
+  #my-hand { height: 58px; gap: 1px }
+
+  .table-played,
+  .table-played-empty { width: 136px; height: 136px }
+
+  .avatar { width: 26px; height: 26px; font-size: 9px }
+  .my-name-ring { width: 38px; height: 38px }
+
+  .mini-back   { width: 12px; height: 19px; margin-right: -5px }
+  .mini-back-v { width: 16px; height: 11px; margin-bottom: -5px }
+
+  .status-bar  { font-size: 9px; padding: 3px 8px; min-width: 110px }
+  .thought-chip{ display: none }   /* hide AI thought bubble on tiny screens */
+
+  .menu-mark h1 { font-size: 22px }
+  .seat-grid    { grid-template-columns: 1fr }   /* stack seats single-column */
+
+  .fly-card   { width: 34px; height: 52px; font-size: 11px }
+  .sweep-card { width: 34px; height: 52px }
+  .deal-card  { width: 26px; height: 40px }
+}
+
+/* ── TALL PHONES — prevent bottom hand from being clipped ── */
+@media (max-height: 640px) and (max-width: 540px) {
+  #game     { min-height: unset; height: 100svh; border-radius: 0 }
+  #table-wrap { min-height: unset; height: 100% }
+}
