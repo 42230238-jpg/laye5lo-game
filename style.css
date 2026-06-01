@@ -843,3 +843,98 @@ body {
     font-size: 10px;
   }
 }
+/* =========================================
+   MOBILE WIDTH FIX — fit hand inside screen
+   Paste at the VERY END of style.css
+   ========================================= */
+
+/* Stop any accidental horizontal page movement */
+html,
+body {
+  overflow-x: hidden;
+}
+
+/* Make sure game never exceeds screen width */
+#game {
+  width: 100%;
+  max-width: 100vw;
+  overflow: hidden;
+}
+
+/* The hand must never be wider than the phone */
+#my-hand-area {
+  width: 100%;
+  max-width: 100vw;
+  overflow: hidden;
+}
+
+#my-hand {
+  width: 100%;
+  max-width: 100vw;
+  padding-inline: 4px;
+  overflow: visible;
+  justify-content: center;
+}
+
+/* On phones, overlap cards instead of letting them leave the screen */
+@media (max-width: 540px) {
+  #my-hand {
+    gap: 0;
+  }
+
+  #my-hand .card {
+    margin-left: -7px;
+    margin-right: -7px;
+  }
+
+  #my-hand .card:first-child {
+    margin-left: 0;
+  }
+
+  #my-hand .card:last-child {
+    margin-right: 0;
+  }
+}
+
+/* Smaller phones need stronger overlap */
+@media (max-width: 430px) {
+  #my-hand .card {
+    width: 38px;
+    height: 58px;
+    margin-left: -8px;
+    margin-right: -8px;
+  }
+
+  #my-hand .card .cnum {
+    font-size: 14px;
+  }
+
+  #my-hand .card .csym {
+    font-size: 7px;
+  }
+
+  #my-hand .card .corner {
+    font-size: 7px;
+  }
+}
+
+/* iPhone SE / very small width */
+@media (max-width: 380px) {
+  #my-hand .card {
+    width: 34px;
+    height: 52px;
+    margin-left: -9px;
+    margin-right: -9px;
+  }
+}
+
+/* If the hand has many cards, compress it more */
+#my-hand:has(.card:nth-child(8)) .card {
+  margin-left: -8px;
+  margin-right: -8px;
+}
+
+#my-hand:has(.card:nth-child(10)) .card {
+  margin-left: -11px;
+  margin-right: -11px;
+}
