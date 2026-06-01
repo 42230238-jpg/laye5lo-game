@@ -729,3 +729,117 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   #game     { min-height: unset; height: 100svh; border-radius: 0 }
   #table-wrap { min-height: unset; height: 100% }
 }
+/* ===============================
+   TRUE FULL-SCREEN RESPONSIVE FIX
+   Paste at the VERY END of style.css
+   =============================== */
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #0a3019;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+}
+
+#game {
+  width: 100vw;
+  height: 100vh;
+  height: 100svh;
+  min-height: unset;
+  max-height: 100svh;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+/* Make the game layout fill the whole game area */
+#table-wrap {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: unset;
+}
+
+/* Avoid Safari/iPhone bottom browser bar clipping the hand */
+.tz-btm {
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+/* Prevent buttons from creating extra page height */
+#my-hand-area {
+  flex-shrink: 0;
+}
+
+/* Mobile: use the full screen, not fixed min-heights */
+@media (max-width: 768px) {
+  #game {
+    height: 100vh;
+    height: 100svh;
+    min-height: unset;
+    max-height: 100svh;
+  }
+
+  #table-wrap {
+    height: 100%;
+    min-height: unset;
+    grid-template-rows: 18% 1fr 30%;
+  }
+}
+
+@media (max-width: 540px) {
+  #game {
+    padding: 4px 3px;
+  }
+
+  #table-wrap {
+    grid-template-columns: 48px 1fr 48px;
+    grid-template-rows: 18% 1fr 31%;
+  }
+
+  .tz-mid {
+    gap: 5px;
+  }
+
+  .table-played,
+  .table-played-empty {
+    width: min(42vw, 160px);
+    height: min(42vw, 160px);
+  }
+
+  #my-hand {
+    max-width: 100vw;
+    justify-content: center;
+    transform-origin: bottom center;
+  }
+
+  .chip-btn {
+    padding: 5px 13px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 380px) {
+  #table-wrap {
+    grid-template-columns: 42px 1fr 42px;
+    grid-template-rows: 17% 1fr 32%;
+  }
+
+  .table-played,
+  .table-played-empty {
+    width: min(39vw, 136px);
+    height: min(39vw, 136px);
+  }
+
+  .chip-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+  }
+}
