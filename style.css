@@ -159,7 +159,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 
 /* ── MY HAND ── */
 #my-hand-area{width:100%;display:flex;flex-direction:column;align-items:center;gap:6px}
-#my-hand{display:flex;justify-content:center;flex-wrap:wrap;gap:5px;padding:4px 0;height:120px;min-height:120px;overflow:visible}
+/* #my-hand defined below in the grid layout section */
 .my-info{display:flex;align-items:center;gap:8px;min-height:58px}
 .my-name-ring{
   width:58px;height:58px;border-radius:50%;
@@ -389,19 +389,148 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   width:100%;
   position:relative;
   display:grid;
-  grid-template-rows: 116px 1fr 170px;
+  /* Bottom row fixed at 200px — cards lift upward into mid, never expanding this row */
+  grid-template-rows: 116px 1fr 200px;
   grid-template-columns: 72px 1fr 72px;
   grid-template-areas:
     "top2  top2  top2"
     "left  mid   right"
     "btm   btm   btm";
   gap:4px;
-  min-height:500px;
+  min-height:520px;
 }
 .tz-top2  {grid-area:top2;display:flex;justify-content:center;align-items:flex-start}
 .tz-left  {grid-area:left;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px}
 .tz-mid   {grid-area:mid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:160px}
 .tz-right {grid-area:right;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px}
-.tz-btm   {grid-area:btm;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;height:190px;min-height:190px;overflow:hidden}
+/* tz-btm: content anchored to bottom; lifted cards bleed upward via overflow:visible */
+.tz-btm   {grid-area:btm;display:flex;flex-direction:column;align-items:center;
+            justify-content:flex-end;gap:4px;overflow:visible;padding-bottom:4px}
 .tz-top2 .player-zone{height:112px}
 .tz-left .player-zone,.tz-right .player-zone{height:150px}
+/* Fixed height hand — cards lift upward so height never changes */
+#my-hand{
+  height:92px;
+  overflow:visible;
+  display:flex;
+  justify-content:center;
+  align-items:flex-end;
+  flex-wrap:nowrap;
+  gap:3px;
+  padding:0;
+}
+/* ── ANIMATIONS ─────────────────────────────────────────── */
+
+/* Anim layer sits above everything, pointer-events off so game still works */
+#anim-layer{
+  position:absolute;inset:0;z-index:100;
+  pointer-events:none;overflow:hidden;border-radius:16px;
+}
+
+/* ── SHUFFLE OVERLAY ── */
+#shuffle-overlay{
+  position:absolute;inset:0;z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(10,48,25,0.88);border-radius:16px;
+  pointer-events:none;
+}
+#shuffle-deck{
+  position:relative;width:60px;height:88px;
+}
+.sdeck-card{
+  position:absolute;inset:0;border-radius:9px;
+  background:linear-gradient(135deg,#1a3a6b 0%,#0e2248 100%);
+  border:1.5px solid rgba(255,255,255,0.2);
+  box-shadow:2px 4px 10px rgba(0,0,0,0.6);
+  will-change:transform,opacity;
+}
+.sdeck-card::after{
+  content:'';position:absolute;inset:4px;border-radius:5px;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px),
+             repeating-linear-gradient(-45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px);
+}
+#shuffle-label{
+  margin-top:16px;color:rgba(255,255,255,0.7);font-size:13px;font-weight:700;
+  letter-spacing:.5px;text-shadow:0 2px 6px rgba(0,0,0,.8);
+}
+@keyframes sdeal-top{
+  0%  {transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(0,-220px) rotate(-5deg);opacity:0}
+}
+@keyframes sdeal-right{
+  0%  {transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(220px,0) rotate(5deg);opacity:0}
+}
+@keyframes sdeal-bottom{
+  0%  {transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(0,220px) rotate(5deg);opacity:0}
+}
+@keyframes sdeal-left{
+  0%  {transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(-220px,0) rotate(-5deg);opacity:0}
+}
+@keyframes shuffle-left{
+  0%  {transform:translate(0,0) rotate(0deg)}
+  30% {transform:translate(-28px,-4px) rotate(-6deg)}
+  60% {transform:translate(0,0) rotate(0deg)}
+  100%{transform:translate(0,0) rotate(0deg)}
+}
+@keyframes shuffle-right{
+  0%  {transform:translate(0,0) rotate(0deg)}
+  30% {transform:translate(28px,4px) rotate(6deg)}
+  60% {transform:translate(0,0) rotate(0deg)}
+  100%{transform:translate(0,0) rotate(0deg)}
+}
+
+/* ── CARD-DROP FLYING CARD ── */
+.fly-card{
+  position:fixed;
+  width:54px;height:82px;
+  border-radius:9px;
+  font-weight:700;font-size:18px;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  box-shadow:4px 8px 24px rgba(0,0,0,0.7);
+  pointer-events:none;z-index:300;
+  /* Use left/top transitions only — avoids transform overshoot */
+  will-change:left,top,opacity;
+  transition:left 0.32s cubic-bezier(.4,0,.2,1),
+             top  0.32s cubic-bezier(.4,0,.2,1),
+             opacity 0.18s ease;
+}
+.fly-card.fly-active{opacity:1}
+.fly-card.fly-done{opacity:0;transition:opacity 0.12s ease}
+.fly-card .fly-label{font-size:22px;font-weight:800;line-height:1;color:inherit}
+.fly-card .fly-sym{font-size:9px;opacity:0.75;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.fly-card::before{
+  content:'';position:absolute;inset:2px;border-radius:7px;
+  border:1.5px solid rgba(255,255,255,0.28);pointer-events:none;
+}
+
+/* ── TRICK SWEEP ── */
+.sweep-card{
+  position:fixed;
+  width:54px;height:82px;
+  border-radius:9px;
+  pointer-events:none;z-index:300;
+  will-change:transform,opacity;
+  transition:transform 0.45s cubic-bezier(.4,0,.6,1), opacity 0.45s ease;
+}
+.sweep-card.sweep-done{opacity:0;transform:scale(0.5)!important}
+
+/* ── DEAL CARD (floating back-card that lands in player's hand) ── */
+.deal-card{
+  position:fixed;
+  width:40px;height:60px;border-radius:7px;
+  background:linear-gradient(135deg,#1a3a6b,#0e2248);
+  border:1.5px solid rgba(255,255,255,0.18);
+  box-shadow:2px 4px 12px rgba(0,0,0,0.65);
+  pointer-events:none;z-index:300;
+  will-change:transform,opacity;
+  transition:transform 0.4s cubic-bezier(.22,.68,.6,1.1), opacity 0.4s ease;
+}
+.deal-card::after{
+  content:'';position:absolute;inset:3px;border-radius:4px;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px);
+}
+.deal-card.deal-done{opacity:0}
