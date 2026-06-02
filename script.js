@@ -169,13 +169,23 @@ const ANIM = (() => {
   // ── CARD FLY (drop onto table) ────────────────────────────
   // Animates a card flying from `fromRect` center → `toRect` center.
   // card = {color, type}. onDone called after animation.
+
+  // Read current card half-dimensions from CSS variables (responsive-aware)
+  function cardHalf(){
+    const cs=getComputedStyle(document.documentElement);
+    const w=parseFloat(cs.getPropertyValue('--card-w'))||54;
+    const h=parseFloat(cs.getPropertyValue('--card-h'))||82;
+    return{hw:w/2,hh:h/2};
+  }
+
   function flyCard(card, fromX, fromY, toX, toY, onDone){
     const lbl=cardLabel(card);
     const cc=colorClass(card.color);
+    const{hw,hh}=cardHalf();
     const el=document.createElement('div');
     el.className=`fly-card ${cc}`;
     // Place at start — no transform, just left/top so transition is a clean straight line
-    el.style.cssText=`left:${fromX-27}px;top:${fromY-41}px;opacity:0;`;
+    el.style.cssText=`left:${fromX-hw}px;top:${fromY-hh}px;opacity:0;`;
     el.innerHTML=`<div class="fly-label">${lbl}</div><div class="fly-sym">${card.color}</div>`;
     document.body.appendChild(el);
 
@@ -183,8 +193,8 @@ const ANIM = (() => {
     requestAnimationFrame(()=>{
       requestAnimationFrame(()=>{
         el.style.opacity='1';
-        el.style.left=`${toX-27}px`;
-        el.style.top=`${toY-41}px`;
+        el.style.left=`${toX-hw}px`;
+        el.style.top=`${toY-hh}px`;
         // onDone fires when card reaches destination (matches transition duration)
         setTimeout(()=>{
           if(onDone) onDone();
@@ -200,13 +210,14 @@ const ANIM = (() => {
   // slots = array of {card, el: DOMRect of the played slot}
   // winnerRect = DOMRect of winner avatar
   function sweepTrick(slotRects, winnerX, winnerY, onDone){
+    const{hw,hh}=cardHalf();
     const els=[];
     slotRects.forEach(({card,x,y})=>{
       const lbl=cardLabel(card);
       const cc=colorClass(card.color);
       const el=document.createElement('div');
       el.className=`sweep-card ${cc}`;
-      el.style.cssText=`left:${x-27}px;top:${y-41}px;font-size:14px;font-weight:700;color:inherit;display:flex;align-items:center;justify-content:center;`;
+      el.style.cssText=`left:${x-hw}px;top:${y-hh}px;font-size:14px;font-weight:700;color:inherit;display:flex;align-items:center;justify-content:center;`;
       el.textContent=lbl;
       document.body.appendChild(el);
       els.push(el);
@@ -215,8 +226,8 @@ const ANIM = (() => {
     requestAnimationFrame(()=>{
       requestAnimationFrame(()=>{
         els.forEach(el=>{
-          const cx=parseFloat(el.style.left)+27;
-          const cy=parseFloat(el.style.top)+41;
+          const cx=parseFloat(el.style.left)+hw;
+          const cy=parseFloat(el.style.top)+hh;
           el.style.transform=`translate(${winnerX-cx}px,${winnerY-cy}px) scale(0.3)`;
           el.style.opacity='0';
         });
@@ -907,10 +918,10 @@ function cardEl(card,opts={}){
   const p=pts(card),ptag=p>0?`<span class="ptag">${p}</span>`:'';
   const l=lbl(card);
   const cc=COLOR_CLASS[card.color];
-  const cls=['card',cc,selected?'selected':'',selectable&&playable?'playable':'',selectable&&!playable?'unplayable':'',offsuit?'offsuit':'',gifted?'gifted':''].filter(Boolean).join(' ');
-  const w=small?40:54,h=small?62:82,fs=small?15:20;
-  const style=`width:${w}px;height:${h}px;font-size:${fs}px;--rot:${rot}deg${rot?`;transform:rotate(${rot}deg)`:''}`;
-  return `<div class="${cls}" style="${style}"
+  // Use CSS classes for sizing — dimensions driven by CSS variables (responsive)
+  const cls=['card',cc,small?'card-sm':'',selected?'selected':'',selectable&&playable?'playable':'',selectable&&!playable?'unplayable':'',offsuit?'offsuit':'',gifted?'gifted':''].filter(Boolean).join(' ');
+  const style=rot?`transform:rotate(${rot}deg)`:'';
+  return `<div class="${cls}"${style?` style="${style}"`:''}
     ${selectable?`data-play="${card.id}"`:''}
     >
     ${ptag}
@@ -1042,8 +1053,9 @@ function buildHTML(){
   <!-- CENTER: table — diamond layout -->
   <div class="tz-mid">
     ${G.leadColor?`<div class="lead-chip">Lead: ${G.leadColor}</div>`:''}
-    <div class="table-played">${G.table.length===0?'':tableCards}</div>
-    ${G.table.length===0?`<div class="table-played-empty">Waiting for first card...</div>`:''}
+    ${G.table.length===0
+      ?`<div class="table-played-empty">Waiting for first card…</div>`
+      :`<div class="table-played">${tableCards}</div>`}
     <div class="status-bar">${G.statusMsg}</div>
     ${G.botThought?`<div class="thought-chip">${G.botThought}</div>`:''}
   </div>
