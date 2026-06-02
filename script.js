@@ -1,240 +1,6 @@
 const BACKEND_URL = "https://laye5lo-game.onrender.com";
 const socket = io(BACKEND_URL);
 
-// ── SOUND SYSTEM ─────────────────────────────────────────────
-const SFX = (() => {
-  // Pre-load the 5 lee5a voice clips
-  const leeSounds = [1,2,3,4,5].map(n => {
-    const a = new Audio(`sounds/lee5a-${n}.m4a`);
-    a.preload = 'auto';
-    return a;
-  });
-
-  // Simple synthesised sound-effects using the Web Audio API
-  let ctx = null;
-  function getCtx() {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    return ctx;
-  }
-
-  function playTone(freq, type, duration, gain=0.18, delay=0) {
-    try {
-      const ac = getCtx();
-      const osc = ac.createOscillator();
-      const gainNode = ac.createGain();
-      osc.connect(gainNode);
-      gainNode.connect(ac.destination);
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ac.currentTime + delay);
-      gainNode.gain.setValueAtTime(0, ac.currentTime + delay);
-      gainNode.gain.linearRampToValueAtTime(gain, ac.currentTime + delay + 0.01);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + delay + duration);
-      osc.start(ac.currentTime + delay);
-      osc.stop(ac.currentTime + delay + duration + 0.05);
-    } catch(e) {}
-  }
-
-  // Play a random lee5a voice clip
-  function playLee() {
-    const idx = Math.floor(Math.random() * leeSounds.length);
-    const snd = leeSounds[idx];
-    snd.currentTime = 0;
-    snd.play().catch(()=>{});
-  }
-
-  // Card-play whoosh: quick descending sweep
-  function playCardPlay() {
-    try {
-      const ac = getCtx();
-      const osc = ac.createOscillator();
-      const gainNode = ac.createGain();
-      osc.connect(gainNode);
-      gainNode.connect(ac.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(520, ac.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(200, ac.currentTime + 0.18);
-      gainNode.gain.setValueAtTime(0.14, ac.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.22);
-      osc.start(ac.currentTime);
-      osc.stop(ac.currentTime + 0.25);
-      updateHandResponsiveness();
-    } catch(e) {}
-  }
-
-  // Your-turn chime: two quick ascending notes
-  function playMyTurn() {
-    playTone(520, 'sine', 0.12, 0.13, 0);
-    playTone(780, 'sine', 0.18, 0.10, 0.13);
-    updateHandResponsiveness();
-  }
-
-  return { playLee, playCardPlay, playMyTurn };
-})();
-
-// ── ANIMATION SYSTEM ─────────────────────────────────────
-const ANIM = (() => {
-  // ── helpers ──────────────────────────────────────────────
-  function colorClass(color){
-    return {red:'cr',blue:'cb',green:'cg',yellow:'cy'}[color]||'cb';
-  }
-  function cardLabel(card){
-    if(card.type==='draw2')return '+2';
-    if(card.type==='skip')return '⊘';
-    if(card.type==='reverse')return '↺';
-    return card.type;
-  }
-  // Get the bounding rect of a CSS selector, return center {x,y}
-  function center(sel){
-    const el=document.querySelector(sel);
-    if(!el)return null;
-    const r=el.getBoundingClientRect();
-    return{x:r.left+r.width/2, y:r.top+r.height/2};
-  }
-  // Get anim-layer (create if missing)
-  function layer(){
-    let el=document.getElementById('anim-layer');
-    if(!el){
-      el=document.createElement('div');
-      el.id='anim-layer';
-      const game=document.getElementById('game')||document.body;
-      game.appendChild(el);
-    }
-    return el;
-  }
-  function clearLayer(){
-    const l=document.getElementById('anim-layer');
-    if(l)l.innerHTML='';
-  }
-
-  // ── SHUFFLE + DEAL ────────────────────────────────────────
-  // Shows a shuffle animation then calls `done` when finished.
-  // totalCards = 52, dealTo = array of 4 selector strings for player hand zones.
-  function shuffleAndDeal(done){
-    // Inject the overlay
-    const game=document.getElementById('game')||document.body;
-    const overlay=document.createElement('div');
-    overlay.id='shuffle-overlay';
-
-    const NSTACK=8; // visible stacked cards
-    const deckHTML=Array(NSTACK).fill(0).map((_,i)=>`<div class="sdeck-card" style="transform:translate(${(i-NSTACK/2)*0.6}px,${-i*0.9}px);z-index:${i}"></div>`).join('');
-    overlay.innerHTML=`<div id="shuffle-deck">${deckHTML}</div><div id="shuffle-label">Shuffling…</div>`;
-    game.appendChild(overlay);
-
-    const deck=overlay.querySelector('#shuffle-deck');
-    const cards=[...deck.querySelectorAll('.sdeck-card')];
-
-    // ── Phase 1: 3 quick shuffle pulses ──
-    let pulse=0;
-    function doPulse(){
-      if(pulse>=3){afterShuffle();return;}
-      cards.forEach((c,i)=>{
-        const goLeft=i%2===0;
-        c.style.animation='none';
-        c.getBoundingClientRect(); // force reflow
-        c.style.animation=`${goLeft?'shuffle-left':'shuffle-right'} 0.32s ease forwards`;
-      });
-      pulse++;
-      setTimeout(doPulse, 340);
-    }
-    doPulse();
-
-    // ── Phase 2: deal 4 cards outward ──
-    function afterShuffle(){
-      overlay.querySelector('#shuffle-label').textContent='Dealing…';
-      // Positions relative to the overlay center
-      const dirs=[
-        {dx:0,   dy:-220, kf:'sdeal-top'},
-        {dx:220, dy:0,    kf:'sdeal-right'},
-        {dx:0,   dy:220,  kf:'sdeal-bottom'},
-        {dx:-220,dy:0,    kf:'sdeal-left'},
-      ];
-      dirs.forEach((d,i)=>{
-        setTimeout(()=>{
-          const c=document.createElement('div');
-          c.className='sdeck-card';
-          c.style.cssText=`z-index:${NSTACK+i};animation:${d.kf} 0.42s cubic-bezier(.4,0,.2,1) forwards`;
-          deck.appendChild(c);
-        }, i*80);
-      });
-      // Fade out overlay after dealing done
-      setTimeout(()=>{
-        overlay.style.transition='opacity 0.35s';
-        overlay.style.opacity='0';
-        setTimeout(()=>{
-          overlay.remove();
-          done();
-        },360);
-      }, 4*80+440);
-    }
-  }
-
-  // ── CARD FLY (drop onto table) ────────────────────────────
-  // Animates a card flying from `fromRect` center → `toRect` center.
-  // card = {color, type}. onDone called after animation.
-  function flyCard(card, fromX, fromY, toX, toY, onDone){
-    const lbl=cardLabel(card);
-    const cc=colorClass(card.color);
-    const el=document.createElement('div');
-    el.className=`fly-card ${cc}`;
-    // Place at start — no transform, just left/top so transition is a clean straight line
-    el.style.cssText=`left:${fromX-27}px;top:${fromY-41}px;opacity:0;`;
-    el.innerHTML=`<div class="fly-label">${lbl}</div><div class="fly-sym">${card.color}</div>`;
-    document.body.appendChild(el);
-
-    // Two rAF frames: first paints start position, second triggers transition
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{
-        el.style.opacity='1';
-        el.style.left=`${toX-27}px`;
-        el.style.top=`${toY-41}px`;
-        // onDone fires when card reaches destination (matches transition duration)
-        setTimeout(()=>{
-          if(onDone) onDone();
-          el.style.opacity='0';
-          setTimeout(()=>el.remove(), 150);
-        },320);
-      });
-    });
-  }
-
-  // ── TRICK SWEEP ──────────────────────────────────────────
-  // Animates all table cards flying toward winner's avatar, then calls onDone.
-  // slots = array of {card, el: DOMRect of the played slot}
-  // winnerRect = DOMRect of winner avatar
-  function sweepTrick(slotRects, winnerX, winnerY, onDone){
-    const els=[];
-    slotRects.forEach(({card,x,y})=>{
-      const lbl=cardLabel(card);
-      const cc=colorClass(card.color);
-      const el=document.createElement('div');
-      el.className=`sweep-card ${cc}`;
-      el.style.cssText=`left:${x-27}px;top:${y-41}px;font-size:14px;font-weight:700;color:inherit;display:flex;align-items:center;justify-content:center;`;
-      el.textContent=lbl;
-      document.body.appendChild(el);
-      els.push(el);
-    });
-
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{
-        els.forEach(el=>{
-          const cx=parseFloat(el.style.left)+27;
-          const cy=parseFloat(el.style.top)+41;
-          el.style.transform=`translate(${winnerX-cx}px,${winnerY-cy}px) scale(0.3)`;
-          el.style.opacity='0';
-        });
-        setTimeout(()=>{
-          els.forEach(e=>e.remove());
-          if(onDone)onDone();
-        },480);
-      });
-    });
-  }
-
-  // ── PUBLIC INTERFACE ─────────────────────────────────────
-  return { shuffleAndDeal, flyCard, sweepTrick, center };
-})();
-
-
 socket.on("connect", () => {
   console.log("Connected to multiplayer server:", socket.id);
 });
@@ -257,7 +23,6 @@ socket.on("roomCreated", (data) => {
   };
 
   render();
-  updateHandResponsiveness();
 });
 
 socket.on("roomUpdated", (data) => {
@@ -279,7 +44,6 @@ socket.on("roomUpdated", (data) => {
   };
 
   render();
-  updateHandResponsiveness();
 });
 
 socket.on("gameStarted", (data) => {
@@ -302,7 +66,6 @@ socket.on("gameStarted", (data) => {
   };
 
   render();
-  updateHandResponsiveness();
 });
 
 // Live game state pushed after submitGift or playCard
@@ -332,61 +95,6 @@ socket.on("gameState", (data) => {
     roomMsg: gs.phase === 'gift' ? (G.roomMsg || '') : ''
   };
 
-  // Online sound: my-turn chime when currentPlayer becomes me
-  if (G.phase === 'play' && gs.phase === 'play') {
-    if (gs.currentPlayer === data.mySeatIndex && G.currentPlayer !== data.mySeatIndex) {
-      SFX.playMyTurn();
-    }
-  }
-
-  // Online sound: detect newly played card by comparing table lengths.
-  // Works even when the new card triggers roundEnd (gs.phase changes to 'roundEnd').
-  // Skip if the new card was played by THIS client (already fired on click).
-  if (G.phase === 'play') {
-    const prevTableLen = G.table ? G.table.length : 0;
-    // gs.table may be empty if the round just ended; use playedCards as fallback
-    const gsTable = gs.table && gs.table.length > 0 ? gs.table
-      : (gs.playedCards && gs.playedCards.length > (G.playedCards ? G.playedCards.length : 0)
-          ? null : null);
-    const newTableLen = gs.table ? gs.table.length : 0;
-    // A card was added if table grew, OR table reset to 0 (trick finished) but playedCards grew
-    const cardAdded = newTableLen > prevTableLen
-      || (newTableLen === 0 && prevTableLen > 0 && gs.playedCards && G.playedCards
-          && gs.playedCards.length > G.playedCards.length);
-    if (cardAdded) {
-      // Identify the latest played card
-      let lastEntry = newTableLen > prevTableLen && gs.table.length > 0
-        ? gs.table[gs.table.length - 1]
-        : (gs.playedCards && gs.playedCards.length ? { pi: -1, card: gs.playedCards[gs.playedCards.length - 1] } : null);
-      const playedByMe = lastEntry && lastEntry.pi === data.mySeatIndex;
-      if (!playedByMe) {
-        // Someone else played — play card sound + optional lee voice
-        SFX.playCardPlay();
-        if (lastEntry && isLee(lastEntry.card)) {
-          setTimeout(() => SFX.playLee(), 120);
-        }
-        // Fly animation for opponent's card — target the exact rendered slot
-        if (lastEntry && lastEntry.pi !== undefined && lastEntry.pi >= 0) {
-          const pi = lastEntry.pi;
-          const relPos = (pi - data.mySeatIndex + 4) % 4;
-          const avatarSels = ['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
-          const slotClasses = ['slot-bottom','slot-right','slot-top','slot-left'];
-          const fromPt = ANIM.center(avatarSels[relPos]) || {x:window.innerWidth/2,y:window.innerHeight/2};
-          // Hide the slot, read its position, fly to it, then reveal
-          const slotEl = document.querySelector('.'+slotClasses[relPos]);
-          if(slotEl) slotEl.style.opacity='0';
-          const toPt = slotEl
-            ? (()=>{const r=slotEl.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};})()
-            : ANIM.center('.tz-mid') || {x:window.innerWidth/2,y:window.innerHeight/2};
-          ANIM.flyCard(lastEntry.card, fromPt.x, fromPt.y, toPt.x, toPt.y, ()=>{
-            if(slotEl) slotEl.style.opacity='';
-          });
-        }
-      }
-      // My own card: sound + fly already fired on click.
-    }
-  }
-
   // When transitioning gift→play, highlight the incoming gift cards for this seat
   if (wasGift && nowPlay) {
     resolving = false;
@@ -402,14 +110,12 @@ socket.on("gameState", (data) => {
   }
 
   render();
-  updateHandResponsiveness();
 });
 
 socket.on("lobbyError", (message) => {
   console.warn("Lobby error:", message);
   G.roomMsg = message;
   render();
-  updateHandResponsiveness();
 });
 
 // Maps server seats array (4-slot, nulls for empty) to G.roomPlayers format
@@ -572,10 +278,7 @@ function initGame(names=[...DEFAULT_NAMES]){
   G={phase:'gift',hands:hands.map(sortHand),gifts:[null,null,null,null],table:[],
      currentPlayer:0,leadColor:null,scores:[0,0,0,0],roundPts:[0,0,0,0],
      selected:[],statusMsg:`Choose 3 cards to gift to ${pname(1)}`,botThought:'',playedCards:[],knownGiftedLees:[],modal:null};
-  resolving=false;giftedIds=new Set();stopTimer();
-  // Show shuffle+deal animation, then render gift phase
-  G.phase='shuffling'; render();
-  ANIM.shuffleAndDeal(()=>{ G.phase='gift'; render(); });
+  resolving=false;giftedIds=new Set();stopTimer();render();
 }
 
 function getPlayable(idx){
@@ -589,56 +292,23 @@ function getPlayable(idx){
 }
 
 function executePlay(pi,card,reason=''){
-  // Sound effects
-  SFX.playCardPlay();
-  if(isLee(card)) setTimeout(()=>SFX.playLee(), 120);
   stopTimer();
   G.botThought=pi!==0&&reason?`${pname(pi)} chose ${lbl(card)} because ${reason}.`:'';
-
-  // ── Fly animation ────────────────────────────────────────
-  // 1. Capture avatar start position BEFORE render changes the DOM
-  const relPos=(pi-mySeatIndex+4)%4;
-  const avatarSels=['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
-  const slotClasses=['slot-bottom','slot-right','slot-top','slot-left'];
-  const fromPt=ANIM.center(avatarSels[relPos])||{x:window.innerWidth/2,y:window.innerHeight/2};
-
-  // 2. Update game state
   if(!G.playedCards)G.playedCards=[];
   G.playedCards.push(card);
   G.table.push({pi,card});
   G.hands[pi]=sortHand(G.hands[pi].filter(c=>c.id!==card.id));
   if(!G.leadColor)G.leadColor=card.color;
   G.selected=[];
-  const trickDone=hasBothLees(G.table)||G.table.length===4||!hasNextTrickPlayer(G.currentPlayer);
-  if(trickDone){
-    resolving=true;
-    G.statusMsg=hasBothLees(G.table)?'Both Lee5as taken! Round ends now.':'Trick complete...';
+  if(hasBothLees(G.table)||G.table.length===4||!hasNextTrickPlayer(G.currentPlayer)){
+    resolving=true;G.statusMsg=hasBothLees(G.table)?'Both Lee5as taken! Round ends now.':'Trick complete...';render();
+    setTimeout(finishTrick,1150);
   } else {
     G.currentPlayer=nextTrickP(G.currentPlayer);
-    setStatus();
+    setStatus();render();
+    if(G.currentPlayer===mySeatIndex){startTimer();}
+    else{setTimeout(aiPlay,680);}
   }
-
-  // 3. Render so the slot exists in DOM, then hide it until the fly card lands
-  render();
-  updateHandResponsiveness();
-  const slotEl=document.querySelector('.'+slotClasses[relPos]);
-  if(slotEl) slotEl.style.opacity='0';
-
-  // 4. Read the exact rendered slot center as the fly target
-  const toPt=slotEl
-    ?(()=>{const r=slotEl.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};})()
-    :ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
-
-  // 5. Fly to that exact position; reveal slot on landing
-  ANIM.flyCard(card, fromPt.x, fromPt.y, toPt.x, toPt.y, ()=>{
-    if(slotEl) slotEl.style.opacity='';
-    if(trickDone){
-      setTimeout(finishTrick,900);
-    } else {
-      if(G.currentPlayer===mySeatIndex){startTimer();}
-      else{setTimeout(aiPlay,300);}
-    }
-  });
 }
 function nextP(p){return(p+1)%4;}
 function nextActiveP(p){
@@ -833,34 +503,16 @@ function finishTrick(){
   const leeCount=tCards.filter(c=>isLee(c)).length;
   const blueDraw2Taken=tCards.some(c=>c.color==='blue'&&c.type==='draw2');
   if(blueDraw2Taken)nextRoundStarter=rightOf(wi);
-  // Both-lee trick: winner gets 37 pts (+ any reds in that trick);
-  // all other players' accumulated round points are wiped to 0.
   let p=tCards.reduce((s,c)=>s+pts(c),0);
-  if(leeCount===2)p=37+tCards.filter(c=>c.color==='red').reduce((s,c)=>s+pts(c),0);
+  if(leeCount===2)p=37;
   G.roundPts[wi]+=p;
-  if(leeCount===2)G.roundPts=G.roundPts.map((v,i)=>i===wi?v:0);
-  G.statusMsg=leeCount===2?`${pname(wi)} took both Lee5as! +${p} pts - round over!`:`${pname(wi)} wins trick${p>0?' (+'+p+'pts)':''}`;
-  // ── Sweep animation: fly table cards to winner before clearing ──
-  const _slotNames=['slot-bottom','slot-right','slot-top','slot-left'];
-  const _slotRects=G.table.map(t=>{
-    const rp=(t.pi-mySeatIndex+4)%4;
-    const el=document.querySelector('.'+_slotNames[rp]);
-    const pt=el?(()=>{const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};})():ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
-    return{card:t.card,x:pt.x,y:pt.y};
-  });
-  const _winRp=(wi-mySeatIndex+4)%4;
-  const _winSels=['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
-  const _winPt=ANIM.center(_winSels[_winRp])||{x:window.innerWidth/2,y:window.innerHeight/2};
+  G.statusMsg=p===37?`${pname(wi)} took both Lee5as! +37 pts - round over!`:`${pname(wi)} wins trick${p>0?' (+'+p+'pts)':''}`;
   G.table=[];G.leadColor=null;
-  render(); 
-  updateHandResponsiveness();// clear table visually before sweep
-  ANIM.sweepTrick(_slotRects,_winPt.x,_winPt.y,()=>{
-    if(leeCount===2){endRound();return;}
-    if(G.hands.every(h=>h.length===0)){endRound();return;}
-    G.currentPlayer=G.hands[wi].length>0?wi:nextActiveP(wi);setStatus();render();
-    if(G.currentPlayer===mySeatIndex){startTimer();}
-    else{setTimeout(aiPlay,720);}
-  });
+  if(leeCount===2){endRound();return;}
+  if(G.hands.every(h=>h.length===0)){endRound();return;}
+  G.currentPlayer=G.hands[wi].length>0?wi:nextActiveP(wi);setStatus();render();
+  if(G.currentPlayer===mySeatIndex){startTimer();}
+  else{setTimeout(aiPlay,720);}
 }
 function pname(i){return playerNames[i]||DEFAULT_NAMES[i];}
 function setStatus(){
@@ -893,13 +545,9 @@ function doGifts(){
   // mark incoming cards for glow
   giftedIds=new Set(incomingGift.map(c=>c.id));
   setStatus();render();
-  updateHandResponsiveness();
   // clear glow after 5 seconds
   setTimeout(()=>{giftedIds=new Set();render();},5000);
-  // Only start the human turn-timer when it's actually our turn.
-  // If a bot starts the round, schedule its play instead.
-  if(G.currentPlayer===mySeatIndex){startTimer();}
-  else{setTimeout(aiPlay,720);}
+  startTimer();
 }
 
 function aiPlay(){
@@ -950,7 +598,6 @@ function buildHTML(){
   if(G.phase==='customRoom')return buildCustomRoomHTML()+modal;
   if(G.phase==='roomLobby')return buildRoomLobbyHTML()+modal;
   if(G.phase==='gift')return buildGiftHTML()+modal;
-  if(G.phase==='shuffling')return buildShufflingHTML();
 
   // rel(n): seat index at position n steps clockwise from my seat
   // bottom=me(0), right=+1, top=+2, left=+3
@@ -1052,8 +699,10 @@ function buildHTML(){
   <!-- CENTER: table — diamond layout -->
   <div class="tz-mid">
     ${G.leadColor?`<div class="lead-chip">Lead: ${G.leadColor}</div>`:''}
-    <div class="table-played">${G.table.length===0?'':tableCards}</div>
-    ${G.table.length===0?`<div class="table-played-empty">Waiting for first card...</div>`:''}
+    ${G.table.length===0
+      ? `<div class="table-played-empty">Waiting for first card...</div>`
+      : `<div class="table-played">${tableCards}</div>`
+    }
     <div class="status-bar">${G.statusMsg}</div>
     ${G.botThought?`<div class="thought-chip">${G.botThought}</div>`:''}
   </div>
@@ -1091,14 +740,6 @@ function buildHTML(){
 ${modal}`;
 }
 
-
-// ── SHUFFLE PHASE (blank table while overlay runs) ─────────
-function buildShufflingHTML(){
-  return `
-<div id="table-wrap" style="display:flex;align-items:center;justify-content:center;min-height:520px">
-  <div style="color:rgba(255,255,255,0.3);font-size:13px;font-weight:600">Shuffling…</div>
-</div>`;
-}
 
 // ── GIFT PHASE ────────────────────────────────────────────
 function buildGiftHTML(){
@@ -1257,7 +898,6 @@ function attachEvents(){
       const idx=G.selected.findIndex(c=>c.id===id);
       if(idx>=0)G.selected.splice(idx,1);else if(G.selected.length<3)G.selected.push(card);
       render();
-      updateHandResponsiveness();
     });
   });
   document.querySelectorAll('[data-play]').forEach(el=>{
@@ -1270,14 +910,6 @@ function attachEvents(){
 
       if(G.roomCode){
         // Online: send to server; server will broadcast gameState to everyone
-        SFX.playCardPlay();
-        if(isLee(card)) setTimeout(()=>SFX.playLee(), 120);
-        // Fly from my avatar to the exact slot that will render
-        const _fp=ANIM.center('.tz-btm .avatar')||{x:window.innerWidth/2,y:window.innerHeight*0.8};
-        // slot-bottom is where my card lands; read it after the next gameState render
-        // For now fly to tz-mid center — online slot position read in gameState handler
-        const _tp=ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
-        ANIM.flyCard(card,_fp.x,_fp.y,_tp.x,_tp.y,null);
         socket.emit('playCard',{roomCode:G.roomCode,cardId:id});
       } else {
         // Local Quick Play: run the full local engine
@@ -1289,7 +921,6 @@ function attachEvents(){
 
 // ── TIMER ────────────────────────────────────────────────
 function startTimer(){
-  SFX.playMyTurn();
   stopTimer();
   turnTimeLeft=20;
   updateTimerBar();
@@ -1503,7 +1134,6 @@ window.confirmGift=function(){
     G.roomMsg='Waiting for other players to gift…';
     G.selected=[];
     render();
-    updateHandResponsiveness();
     return;
   }
   // Local Quick Play
@@ -1515,7 +1145,6 @@ window.hostNextRound=function(){
   socket.emit('startNextRound',{roomCode:G.roomCode});
   G.modal=null;
   render();
-  updateHandResponsiveness();
 };
 window.newGame=function(){initGame();};
 window.showRules=function(){G.modal={type:'rules'};render();};
@@ -1529,7 +1158,6 @@ window.showJoinRoom=function(){G.roomMode='join';G.joinCode='';G.roomMsg='';rend
 window.enterRoomLobby=function(){
   G={phase:'roomLobby',modal:null,roomCode:G.roomCode||makeRoomCode(),roomMsg:'',roomPlayers:defaultRoomPlayers()};
   render();
-  updateHandResponsiveness();
 };
 window.joinCustomRoom=function(){
   const input=document.getElementById('join-room-code');
@@ -1609,17 +1237,15 @@ window.copyRoomCode=function(){
   } else {
     G.roomMsg='Select the code manually.';
     render();
-    updateHandResponsiveness();
   }
 };
 
 function newRound(){
   const deck=shuffle(buildDeck());const hands=[[],[],[],[]];
   deck.forEach((c,i)=>hands[i%4].push(c));
-  G.hands=hands.map(sortHand);G.phase='shuffling';G.gifts=[null,null,null,null];G.table=[];
+  G.hands=hands.map(sortHand);G.phase='gift';G.gifts=[null,null,null,null];G.table=[];
   G.leadColor=null;G.selected=[];G.statusMsg=`Choose 3 cards to gift to ${pname(1)}`;G.botThought='';G.playedCards=[];G.knownGiftedLees=[];G.modal=null;G.roundPts=[0,0,0,0];
   resolving=false;giftedIds=new Set();stopTimer();render();
-  ANIM.shuffleAndDeal(()=>{ G.phase='gift'; render(); });
 }
 
 initMenu();
@@ -1629,34 +1255,9 @@ window.createOnlineRoom = function () {
 
 window.joinOnlineRoom = function () {
   // Navigate to the join-room input screen
+  G.phase = 'customRoom';
   G.roomMode = 'join';
   G.joinCode = '';
   G.roomMsg = '';
   render();
-  updateHandResponsiveness();
 };
-function updateHandResponsiveness() {
-  const hand = document.getElementById("my-hand");
-  if (!hand) return;
-
-  const cards = hand.querySelectorAll(".card");
-  const count = cards.length || 1;
-
-  hand.style.setProperty("--hand-count", count);
-
-  hand.classList.toggle("many-cards", count >= 9);
-  hand.classList.toggle("too-many-cards", count >= 12);
-}
-
-window.addEventListener("resize", updateHandResponsiveness);
-window.addEventListener("orientationchange", updateHandResponsiveness);
-
-const handObserver = new MutationObserver(updateHandResponsiveness);
-
-window.addEventListener("DOMContentLoaded", () => {
-  const hand = document.getElementById("my-hand");
-  if (hand) {
-    handObserver.observe(hand, { childList: true, subtree: true });
-    updateHandResponsiveness();
-  }
-});

@@ -441,9 +441,8 @@ function playCardForSeat(roomCode, seatIndex, cardId) {
 
   if (trickDone) {
     // ── Score and finish the trick ──────────────────────────
-    // Both-lee trick: winner gets 37 flat + any red cards played on that same trick
     const trickPts = leesOnTable === 2
-      ? 37 + game.table.reduce((s, t) => s + (t.card.color === 'red' ? pts(t.card) : 0), 0)
+      ? 37
       : game.table.reduce((s, t) => s + pts(t.card), 0);
 
     const winner = trickWinnerServer(game.table, game.leadColor);
@@ -452,7 +451,7 @@ function playCardForSeat(roomCode, seatIndex, cardId) {
     game.roundPts[wi] = (game.roundPts[wi] || 0) + trickPts;
 
     const msg = leesOnTable === 2
-      ? `${game.playerNames[wi]} took both Lee5as! +${trickPts} pts`
+      ? `${game.playerNames[wi]} took both Lee5as! +37 pts`
       : `${game.playerNames[wi]} wins trick${trickPts > 0 ? ` (+${trickPts}pts)` : ''}`;
 
     game.statusMsg = msg;
@@ -477,11 +476,6 @@ function playCardForSeat(roomCode, seatIndex, cardId) {
       const roundOver = leesOnTable === 2 || g.hands.every(h => h.length === 0);
 
       if (roundOver) {
-        // Both-lee rule: the trick winner keeps their accumulated roundPts;
-        // all other players' round points are wiped to 0.
-        if (leesOnTable === 2) {
-          g.roundPts = g.roundPts.map((p, i) => i === wi ? p : 0);
-        }
         g.scores = g.scores.map((sc, i) => sc + (g.roundPts[i] || 0));
         const maxScore = Math.max(...g.scores);
         const gameOver = maxScore >= 101;
@@ -611,17 +605,13 @@ function scheduleBotPlay(roomCode) {
         room.game.gifts[idx] = chooseSimpleGift(room.game.hands[idx]);
       }
     });
-    // If all gifts are already ready (e.g. all seats are bots), transition to play immediately
+    // If all bots (shouldn't happen in a real game but just in case)
     if (room.game.gifts.every(Boolean)) {
       applyGifts(room.game);
       room.game.phase = 'play';
       room.game.currentPlayer = 0;
       room.game.statusMsg = `${room.game.playerNames[0]}'s turn`;
       broadcastGameState(roomCode);
-      // Kick off bot play if seat 0 is a bot
-      if (isBotSeat(room, 0)) {
-        setTimeout(() => scheduleBotPlay(roomCode), 750);
-      }
     }
   });
 
