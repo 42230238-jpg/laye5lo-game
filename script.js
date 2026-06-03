@@ -1603,7 +1603,7 @@ window.showRules=function(){G.modal={type:'rules'};render();};
 window.closeModal=function(){G.modal=null;render();};
 window.setBotDifficulty=function(level){botDifficulty=level;render();};
 window.openLee5aMenu=function(){stopTimer();G={phase:'menu',modal:null,roomCode:null,roomMsg:''};render();};
-window.openArba3meye=function(){stopTimer();window.location.href='arba3meye.html';};
+window.openArba3meye=function(){stopTimer();window.location.href='arba3meye.html?v=3';};
 window.backToGameSelect=function(){initMenu();};
 window.openQuickSetup=function(){stopTimer();G={phase:'quickSetup',modal:null};render();};
 window.quickPlay=function(){initGame();};
