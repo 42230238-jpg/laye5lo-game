@@ -661,38 +661,45 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
    On tall phones (> 700 px) the 1fr middle row has plenty of room.
    We let the table size and side-zone player info scale up slightly
    so the table doesn't look lost in a sea of green. */
-@media (min-height:700px) and (orientation:portrait){
+@media (max-width:520px) and (min-height:700px) and (orientation:portrait){
   :root{
-    --card-w:62px;--card-h:94px;
-    --card-fs:20px;--card-num-fs:22px;--card-sym-fs:10px;
-    --hand-h:110px;
-    --hand-overlap:-36px;
-    --table-size:250px;
-    --top-row:112px;--btm-row:226px;
+    --card-w:72px;--card-h:110px;
+    --card-fs:22px;--card-num-fs:25px;--card-sym-fs:11px;
+    --hand-h:352px;
+    --hand-overlap:0px;
+    --table-size:228px;
+    --top-row:108px;--btm-row:468px;
+  }
+  #my-hand{
+    width:100%;
+    flex-wrap:wrap;
+    align-content:flex-end;
+    align-items:flex-end;
+    gap:8px 4px;
+    padding:0 2px;
   }
   .tz-left .player-zone,.tz-right .player-zone{gap:6px}
 }
-@media (min-height:850px) and (orientation:portrait){
+@media (max-width:520px) and (min-height:850px) and (orientation:portrait){
   :root{
-    --card-w:66px;--card-h:100px;
-    --card-fs:21px;--card-num-fs:24px;--card-sym-fs:10px;
-    --hand-h:116px;
-    --hand-overlap:-39px;
-    --table-size:262px;
+    --card-w:74px;--card-h:112px;
+    --card-fs:23px;--card-num-fs:26px;--card-sym-fs:11px;
+    --hand-h:360px;
+    --table-size:238px;
     --avatar-sz:44px;
-    --top-row:118px;--btm-row:238px;
+    --top-row:114px;--btm-row:478px;
   }
   .tz-mid{gap:12px}
 }
 
 @media (max-width:360px) and (min-height:700px) and (orientation:portrait){
   :root{
-    --card-w:56px;--card-h:85px;
-    --card-fs:18px;--card-num-fs:20px;--card-sym-fs:9px;
-    --hand-h:100px;
-    --hand-overlap:-33px;
-    --table-size:232px;
-    --top-row:108px;--btm-row:210px;
+    --card-w:66px;--card-h:100px;
+    --card-fs:20px;--card-num-fs:23px;--card-sym-fs:10px;
+    --hand-h:328px;
+    --hand-overlap:0px;
+    --table-size:214px;
+    --top-row:104px;--btm-row:440px;
   }
 }
 
