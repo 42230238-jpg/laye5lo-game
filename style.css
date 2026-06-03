@@ -663,43 +663,49 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
    so the table doesn't look lost in a sea of green. */
 @media (max-width:520px) and (min-height:700px) and (orientation:portrait){
   :root{
-    --card-w:72px;--card-h:110px;
-    --card-fs:22px;--card-num-fs:25px;--card-sym-fs:11px;
-    --hand-h:352px;
+    --card-w:86px;--card-h:132px;
+    --card-fs:28px;--card-num-fs:31px;--card-sym-fs:14px;
+    --hand-h:558px;
     --hand-overlap:0px;
-    --table-size:228px;
-    --top-row:108px;--btm-row:468px;
+    --table-size:220px;
+    --top-row:126px;--btm-row:682px;
+    --mini-bw:32px;--mini-bh:50px;
+    --mini-vw:42px;--mini-vh:30px;
   }
   #my-hand{
     width:100%;
     flex-wrap:wrap;
     align-content:flex-end;
     align-items:flex-end;
-    gap:8px 4px;
-    padding:0 2px;
+    gap:10px 5px;
+    padding:0 4px;
   }
   .tz-left .player-zone,.tz-right .player-zone{gap:6px}
 }
 @media (max-width:520px) and (min-height:850px) and (orientation:portrait){
   :root{
-    --card-w:74px;--card-h:112px;
-    --card-fs:23px;--card-num-fs:26px;--card-sym-fs:11px;
-    --hand-h:360px;
-    --table-size:238px;
+    --card-w:92px;--card-h:140px;
+    --card-fs:30px;--card-num-fs:34px;--card-sym-fs:15px;
+    --hand-h:590px;
+    --table-size:226px;
     --avatar-sz:44px;
-    --top-row:114px;--btm-row:478px;
+    --top-row:132px;--btm-row:716px;
+    --mini-bw:34px;--mini-bh:53px;
+    --mini-vw:44px;--mini-vh:32px;
   }
   .tz-mid{gap:12px}
 }
 
 @media (max-width:360px) and (min-height:700px) and (orientation:portrait){
   :root{
-    --card-w:66px;--card-h:100px;
-    --card-fs:20px;--card-num-fs:23px;--card-sym-fs:10px;
-    --hand-h:328px;
+    --card-w:76px;--card-h:116px;
+    --card-fs:24px;--card-num-fs:27px;--card-sym-fs:12px;
+    --hand-h:494px;
     --hand-overlap:0px;
-    --table-size:214px;
-    --top-row:104px;--btm-row:440px;
+    --table-size:204px;
+    --top-row:120px;--btm-row:616px;
+    --mini-bw:28px;--mini-bh:44px;
+    --mini-vw:36px;--mini-vh:26px;
   }
 }
 
