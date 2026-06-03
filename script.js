@@ -300,104 +300,115 @@ socket.on("gameStarted", (data) => {
   giftedIds = new Set();
   stopTimer();
 
+  // Show the same shuffle+deal animation as local Quick Play
   G = {
     ...gs,
+    phase: 'shuffling',          // override so buildShufflingHTML() renders
     roomCode: data.roomCode,
     isHost: G.isHost,
     giftSubmitted: false,
     roomMsg: ''
   };
-
   render();
+  ANIM.shuffleAndDeal(() => {
+    G.phase = 'gift';
+    render();
+  });
 });
 
 // Live game state pushed after submitGift or playCard
 socket.on("gameState", (data) => {
   console.log("Game state update — phase:", data.gameState.phase, "seat", data.mySeatIndex);
   const gs = data.gameState;
-  const wasGift = G.phase === 'gift';
-  const wasRoundEnd = G.phase === 'roundEnd' || G.phase === 'gameEnd';
-  const nowPlay = gs.phase === 'play';
-  const nowGift = gs.phase === 'gift';
+  const wasGift    = G.phase === 'gift';
+  const wasRoundEnd= G.phase === 'roundEnd' || G.phase === 'gameEnd';
+  const nowPlay    = gs.phase === 'play';
+  const nowGift    = gs.phase === 'gift';
 
-  // Host clicked Next Round — everyone enters fresh gift phase
+  playerNames  = [...gs.playerNames];
+  mySeatIndex  = data.mySeatIndex;
+
+  // ── Host pressed "Next Round" → show shuffle animation ──────
   if (wasRoundEnd && nowGift) {
     stopTimer();
     giftedIds = new Set();
     resolving = false;
+    G = {
+      ...gs,
+      phase: 'shuffling',
+      roomCode: data.roomCode,
+      isHost: G.isHost,
+      giftSubmitted: false,
+      roomMsg: ''
+    };
+    render();
+    ANIM.shuffleAndDeal(() => { G.phase = 'gift'; render(); });
+    return;
   }
 
-  playerNames = [...gs.playerNames];
-  mySeatIndex = data.mySeatIndex;
+  // ── Pre-render snapshot — read DOM positions BEFORE wiping ──
+  const prevTable      = G.table       ? [...G.table]       : [];
+  const prevPlayed     = G.playedCards ? G.playedCards.length : 0;
+  const prevLeadColor  = G.leadColor;
+  const newTableLen    = (gs.table || []).length;
+  const prevTableLen   = prevTable.length;
+  const newPlayed      = (gs.playedCards || []).length;
 
+  // Which event happened?
+  const singleCardAdded = newTableLen > prevTableLen;            // normal play
+  const trickEnded      = newTableLen === 0 && prevTableLen > 0  // trick resolved
+                          && newPlayed > prevPlayed;
+
+  // Identify the card that was just played and who played it
+  const slotNames = ['slot-bottom','slot-right','slot-top','slot-left'];
+  const avatarSels= ['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
+
+  let newEntry = null; // {pi, card}
+  if (singleCardAdded && gs.table.length > 0) {
+    newEntry = gs.table[gs.table.length - 1];
+  } else if (trickEnded) {
+    // Find which player hasn't played yet — that's the trick-ender
+    const playedPis = new Set(prevTable.map(t => t.pi));
+    const fourthPi  = [0,1,2,3].find(p => !playedPis.has(p));
+    const lastCard  = gs.playedCards ? gs.playedCards[newPlayed - 1] : null;
+    if (fourthPi !== undefined && lastCard) newEntry = { pi: fourthPi, card: lastCard };
+  }
+
+  // Capture old rendered slot positions while they still exist in the DOM
+  let prevSlotRects = [];
+  if (trickEnded && prevTableLen > 0) {
+    prevSlotRects = prevTable.map(t => {
+      const rp = (t.pi - data.mySeatIndex + 4) % 4;
+      const el = document.querySelector('.' + slotNames[rp]);
+      const r  = el && el.getBoundingClientRect();
+      return {
+        card: t.card,
+        x: r ? r.left + r.width  / 2 : window.innerWidth  / 2,
+        y: r ? r.top  + r.height / 2 : window.innerHeight / 2
+      };
+    });
+  }
+
+  // ── Update G ─────────────────────────────────────────────────
   G = {
     ...gs,
-    roomCode: data.roomCode,
-    isHost: G.isHost,
+    roomCode:      data.roomCode,
+    isHost:        G.isHost,
     giftSubmitted: gs.phase === 'gift' ? (G.giftSubmitted || false) : false,
-    roomMsg: gs.phase === 'gift' ? (G.roomMsg || '') : ''
+    roomMsg:       gs.phase === 'gift' ? (G.roomMsg || '') : ''
   };
 
-  // Online sound: my-turn chime when currentPlayer becomes me
-  if (G.phase === 'play' && gs.phase === 'play') {
-    if (gs.currentPlayer === data.mySeatIndex && G.currentPlayer !== data.mySeatIndex) {
-      SFX.playMyTurn();
-    }
+  // ── Sounds ───────────────────────────────────────────────────
+  if (nowPlay && gs.currentPlayer === data.mySeatIndex) SFX.playMyTurn();
+  if (newEntry && newEntry.pi !== data.mySeatIndex) {
+    SFX.playCardPlay();
+    if (isLee(newEntry.card)) setTimeout(() => SFX.playLee(), 120);
   }
 
-  // Online sound: detect newly played card by comparing table lengths.
-  // Works even when the new card triggers roundEnd (gs.phase changes to 'roundEnd').
-  // Skip if the new card was played by THIS client (already fired on click).
-  if (G.phase === 'play') {
-    const prevTableLen = G.table ? G.table.length : 0;
-    // gs.table may be empty if the round just ended; use playedCards as fallback
-    const gsTable = gs.table && gs.table.length > 0 ? gs.table
-      : (gs.playedCards && gs.playedCards.length > (G.playedCards ? G.playedCards.length : 0)
-          ? null : null);
-    const newTableLen = gs.table ? gs.table.length : 0;
-    // A card was added if table grew, OR table reset to 0 (trick finished) but playedCards grew
-    const cardAdded = newTableLen > prevTableLen
-      || (newTableLen === 0 && prevTableLen > 0 && gs.playedCards && G.playedCards
-          && gs.playedCards.length > G.playedCards.length);
-    if (cardAdded) {
-      // Identify the latest played card
-      let lastEntry = newTableLen > prevTableLen && gs.table.length > 0
-        ? gs.table[gs.table.length - 1]
-        : (gs.playedCards && gs.playedCards.length ? { pi: -1, card: gs.playedCards[gs.playedCards.length - 1] } : null);
-      const playedByMe = lastEntry && lastEntry.pi === data.mySeatIndex;
-      if (!playedByMe) {
-        // Someone else played — play card sound + optional lee voice
-        SFX.playCardPlay();
-        if (lastEntry && isLee(lastEntry.card)) {
-          setTimeout(() => SFX.playLee(), 120);
-        }
-        // Fly animation for opponent's card — target the exact rendered slot
-        if (lastEntry && lastEntry.pi !== undefined && lastEntry.pi >= 0) {
-          const pi = lastEntry.pi;
-          const relPos = (pi - data.mySeatIndex + 4) % 4;
-          const avatarSels = ['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
-          const slotClasses = ['slot-bottom','slot-right','slot-top','slot-left'];
-          const fromPt = ANIM.center(avatarSels[relPos]) || {x:window.innerWidth/2,y:window.innerHeight/2};
-          // Hide the slot, read its position, fly to it, then reveal
-          const slotEl = document.querySelector('.'+slotClasses[relPos]);
-          if(slotEl) slotEl.style.opacity='0';
-          const toPt = slotEl
-            ? (()=>{const r=slotEl.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};})()
-            : ANIM.center('.tz-mid') || {x:window.innerWidth/2,y:window.innerHeight/2};
-          ANIM.flyCard(lastEntry.card, fromPt.x, fromPt.y, toPt.x, toPt.y, ()=>{
-            if(slotEl) slotEl.style.opacity='';
-          });
-        }
-      }
-      // My own card: sound + fly already fired on click.
-    }
-  }
-
-  // When transitioning gift→play, highlight the incoming gift cards for this seat
+  // ── Gift → Play transition ───────────────────────────────────
   if (wasGift && nowPlay) {
     resolving = false;
     stopTimer();
-    // Server now tells us exactly which card IDs this seat received as gifts
     if (gs.receivedGiftCardIdsBySeat && gs.receivedGiftCardIdsBySeat[data.mySeatIndex]) {
       giftedIds = new Set(gs.receivedGiftCardIdsBySeat[data.mySeatIndex]);
       setTimeout(() => { giftedIds = new Set(); render(); }, 3000);
@@ -407,7 +418,56 @@ socket.on("gameState", (data) => {
     if (G.currentPlayer === mySeatIndex) startTimer();
   }
 
+  // ── Render (DOM is now up-to-date) ───────────────────────────
   render();
+
+  // ── Post-render animations ───────────────────────────────────
+
+  if (singleCardAdded && newEntry && newEntry.pi >= 0) {
+    // ── Card fly: avatar → its slot (slot now exists in DOM) ──
+    const relPos  = (newEntry.pi - data.mySeatIndex + 4) % 4;
+    const fromPt  = ANIM.center(avatarSels[relPos]) || {x:window.innerWidth/2, y:window.innerHeight/2};
+    const slotEl  = document.querySelector('.' + slotNames[relPos]);
+    if (slotEl) slotEl.style.opacity = '0';
+    const r       = slotEl && slotEl.getBoundingClientRect();
+    const toPt    = r
+      ? {x: r.left + r.width/2, y: r.top + r.height/2}
+      : ANIM.center('.tz-mid') || {x:window.innerWidth/2, y:window.innerHeight/2};
+    ANIM.flyCard(newEntry.card, fromPt.x, fromPt.y, toPt.x, toPt.y, () => {
+      if (slotEl) slotEl.style.opacity = '';
+    });
+
+  } else if (trickEnded && prevSlotRects.length > 0) {
+    // ── Trick sweep: all played cards fly to winner ────────────
+    // Determine trick winner
+    let winnerPi;
+    if (gs.phase === 'play') {
+      winnerPi = gs.currentPlayer; // winner leads next trick
+    } else {
+      // roundEnd / gameEnd — compute from the full trick
+      const fullTrick = [
+        ...prevTable,
+        ...(newEntry ? [{pi: newEntry.pi, card: newEntry.card}] : [])
+      ];
+      try {
+        winnerPi = prevLeadColor && fullTrick.length
+          ? trickWinner(fullTrick, prevLeadColor).pi
+          : undefined;
+      } catch(e) { winnerPi = undefined; }
+    }
+    const winRelPos = winnerPi !== undefined ? (winnerPi - data.mySeatIndex + 4) % 4 : 2;
+    const winPt     = ANIM.center(avatarSels[winRelPos]) || {x:window.innerWidth/2, y:window.innerHeight/2};
+
+    // Include the trick-ending card (starts at the player's avatar, never had a slot)
+    let sweepRects = [...prevSlotRects];
+    if (newEntry && newEntry.pi >= 0) {
+      const relPos4 = (newEntry.pi - data.mySeatIndex + 4) % 4;
+      const pt4     = ANIM.center(avatarSels[relPos4]) || {x:window.innerWidth/2, y:window.innerHeight/2};
+      sweepRects.push({card: newEntry.card, x: pt4.x, y: pt4.y});
+    }
+
+    ANIM.sweepTrick(sweepRects, winPt.x, winPt.y, () => {});
+  }
 });
 
 socket.on("lobbyError", (message) => {
@@ -1097,7 +1157,7 @@ ${modal}`;
 // ── SHUFFLE PHASE (blank table while overlay runs) ─────────
 function buildShufflingHTML(){
   return `
-<div id="table-wrap" style="display:flex;align-items:center;justify-content:center;">
+<div id="table-wrap" style="display:flex;align-items:center;justify-content:center;min-height:520px">
   <div style="color:rgba(255,255,255,0.3);font-size:13px;font-weight:600">Shuffling…</div>
 </div>`;
 }
@@ -1270,15 +1330,11 @@ function attachEvents(){
       if(!getPlayable(mySeatIndex).find(c=>c.id===card.id))return;
 
       if(G.roomCode){
-        // Online: send to server; server will broadcast gameState to everyone
+        // Online: fire sounds immediately for responsiveness,
+        // but let the gameState response drive the fly animation
+        // (so it lands on the correct slot, not a guessed position).
         SFX.playCardPlay();
         if(isLee(card)) setTimeout(()=>SFX.playLee(), 120);
-        // Fly from my avatar to the exact slot that will render
-        const _fp=ANIM.center('.tz-btm .avatar')||{x:window.innerWidth/2,y:window.innerHeight*0.8};
-        // slot-bottom is where my card lands; read it after the next gameState render
-        // For now fly to tz-mid center — online slot position read in gameState handler
-        const _tp=ANIM.center('.tz-mid')||{x:window.innerWidth/2,y:window.innerHeight/2};
-        ANIM.flyCard(card,_fp.x,_fp.y,_tp.x,_tp.y,null);
         socket.emit('playCard',{roomCode:G.roomCode,cardId:id});
       } else {
         // Local Quick Play: run the full local engine
