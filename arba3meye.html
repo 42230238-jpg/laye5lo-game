@@ -543,6 +543,7 @@ let G={
   cur:0,round:1,busy:false,winner:null
 };
 let BT=null;
+let startingOnlineGame=false;
 
 function makeRoomCode(){
   const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -582,11 +583,13 @@ socket.on('arbaGameStarted',data=>{
   mySeatIndex=data.mySeatIndex||0;
   NAMES=data.gameState.names||NAMES;
   const nextG={...data.gameState,screen:'game',roomCode:data.roomCode,roomPlayers:G.roomPlayers,isHost:G.isHost,roomMsg:''};
-  G={...G,screen:'game',busy:true};
-  showShuf(()=>{G=nextG;r();});
+  startingOnlineGame=true;
+  G={...nextG,busy:true};
+  r();
+  showShuf(()=>{startingOnlineGame=false;G=nextG;r();});
 });
 socket.on('arbaGameState',data=>{
-  if(G.busy&&G.screen==='game')return;
+  if(startingOnlineGame)return;
   mySeatIndex=data.mySeatIndex||mySeatIndex;
   NAMES=data.gameState.names||NAMES;
   G={...data.gameState,screen:'game',roomCode:data.roomCode,roomPlayers:G.roomPlayers,isHost:G.isHost,roomMsg:''};
