@@ -3,7 +3,6 @@
   --card-w:54px;--card-h:82px;
   --card-fs:18px;--card-num-fs:20px;--card-sym-fs:9px;
   --hand-h:92px;
-  --hand-overlap:0px;
   --table-size:220px;
   --avatar-sz:42px;
   --side-col:72px;--top-row:116px;--btm-row:200px;
@@ -482,7 +481,6 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   position:relative;
 }
 #my-hand>*{position:relative;}
-#my-hand>*+*{margin-left:var(--hand-overlap)}
 
 /* ── ANIMATIONS ─────────────────────────────────────────── */
 
@@ -661,52 +659,18 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
    On tall phones (> 700 px) the 1fr middle row has plenty of room.
    We let the table size and side-zone player info scale up slightly
    so the table doesn't look lost in a sea of green. */
-@media (max-width:520px) and (min-height:700px) and (orientation:portrait){
+@media (min-height:700px) and (orientation:portrait){
   :root{
-    --card-w:86px;--card-h:132px;
-    --card-fs:28px;--card-num-fs:31px;--card-sym-fs:14px;
-    --hand-h:558px;
-    --hand-overlap:0px;
-    --table-size:220px;
-    --top-row:126px;--btm-row:682px;
-    --mini-bw:32px;--mini-bh:50px;
-    --mini-vw:42px;--mini-vh:30px;
-  }
-  #my-hand{
-    width:100%;
-    flex-wrap:wrap;
-    align-content:flex-end;
-    align-items:flex-end;
-    gap:10px 5px;
-    padding:0 4px;
+    --table-size:230px;
   }
   .tz-left .player-zone,.tz-right .player-zone{gap:6px}
 }
-@media (max-width:520px) and (min-height:850px) and (orientation:portrait){
+@media (min-height:850px) and (orientation:portrait){
   :root{
-    --card-w:92px;--card-h:140px;
-    --card-fs:30px;--card-num-fs:34px;--card-sym-fs:15px;
-    --hand-h:590px;
-    --table-size:226px;
+    --table-size:240px;
     --avatar-sz:44px;
-    --top-row:132px;--btm-row:716px;
-    --mini-bw:34px;--mini-bh:53px;
-    --mini-vw:44px;--mini-vh:32px;
   }
   .tz-mid{gap:12px}
-}
-
-@media (max-width:360px) and (min-height:700px) and (orientation:portrait){
-  :root{
-    --card-w:76px;--card-h:116px;
-    --card-fs:24px;--card-num-fs:27px;--card-sym-fs:12px;
-    --hand-h:494px;
-    --hand-overlap:0px;
-    --table-size:204px;
-    --top-row:120px;--btm-row:616px;
-    --mini-bw:28px;--mini-bh:44px;
-    --mini-vw:36px;--mini-vh:26px;
-  }
 }
 
 /* Landscape / short screens (height ≤ 500 px) */
