@@ -3,7 +3,6 @@
   --card-w:54px;--card-h:82px;
   --card-fs:18px;--card-num-fs:20px;--card-sym-fs:9px;
   --hand-h:92px;
-  --hand-overlap:0px;
   --table-size:220px;
   --avatar-sz:42px;
   --side-col:72px;--top-row:116px;--btm-row:200px;
@@ -514,6 +513,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 /* Fixed height hand — overflow:visible so selected cards lift upward */
 #my-hand{
   height:var(--hand-h);
+  width:100%;        /* needed so adjustHand() reads the correct available width */
   overflow:visible;
   display:flex;
   justify-content:center;
@@ -645,36 +645,38 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
    1fr row just expands — no extra rules needed.
    ══════════════════════════════════════════════════════════ */
 
-/* Tablet / phablet (≤ 520 px wide) */
+/* Tablet / phablet (≤ 520 px wide) — sized to match arba3meye */
 @media (max-width:520px){
   :root{
-    --card-w:48px;--card-h:73px;
-    --card-fs:16px;--card-num-fs:17px;--card-sym-fs:8px;
-    --hand-h:83px;
-    --table-size:195px;
-    --avatar-sz:38px;
-    --side-col:64px;--top-row:104px;--btm-row:178px;
+    --card-w:50px;--card-h:76px;
+    --card-fs:16px;--card-num-fs:18px;--card-sym-fs:7px;
+    --hand-h:86px;
+    --table-size:186px;
+    --avatar-sz:36px;
+    --side-col:46px;--top-row:96px;--btm-row:182px;
     --mini-bw:18px;--mini-bh:28px;
-    --mini-vw:24px;--mini-vh:17px;
+    --mini-vw:22px;--mini-vh:16px;
   }
-  #game{border-radius:12px;padding:8px 6px 6px}
+  #game{border-radius:0;padding:6px 4px 4px}
+  /* Hand: left-align on mobile so adjustHand() fills left→right */
+  #my-hand{justify-content:flex-start;padding:0 2px}
 }
 
 /* Mobile (≤ 420 px wide) */
 @media (max-width:420px){
   :root{
-    --card-w:43px;--card-h:66px;
-    --card-fs:14px;--card-num-fs:15px;--card-sym-fs:7px;
-    --hand-h:76px;
-    --table-size:174px;
-    --avatar-sz:34px;
-    --side-col:60px;--top-row:96px;--btm-row:166px;
-    --mini-bw:16px;--mini-bh:25px;
-    --mini-vw:21px;--mini-vh:15px;
+    --card-w:46px;--card-h:70px;
+    --card-fs:15px;--card-num-fs:17px;--card-sym-fs:7px;
+    --hand-h:80px;
+    --table-size:170px;
+    --avatar-sz:32px;
+    --side-col:42px;--top-row:88px;--btm-row:172px;
+    --mini-bw:15px;--mini-bh:24px;
+    --mini-vw:20px;--mini-vh:14px;
   }
-  #game{border-radius:0;padding:8px 5px 5px}
-  .my-info{min-height:48px}
-  .my-name-ring{width:50px;height:50px}
+  #game{border-radius:0;padding:6px 3px 3px}
+  .my-info{min-height:46px}
+  .my-name-ring{width:48px;height:48px}
   .back-arrow{width:34px;height:34px;font-size:28px;top:10px;left:10px}
   .status-bar{padding:4px 10px}
   .tz-mid{gap:5px}
@@ -683,13 +685,13 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 /* Small mobile (≤ 360 px wide) */
 @media (max-width:360px){
   :root{
-    --card-w:38px;--card-h:58px;
-    --card-fs:12px;--card-num-fs:13px;--card-sym-fs:6px;
-    --hand-h:68px;
-    --table-size:154px;
-    --avatar-sz:30px;
-    --side-col:56px;--top-row:88px;--btm-row:154px;
-    --mini-bw:14px;--mini-bh:22px;
+    --card-w:42px;--card-h:64px;
+    --card-fs:14px;--card-num-fs:15px;--card-sym-fs:6px;
+    --hand-h:74px;
+    --table-size:152px;
+    --avatar-sz:28px;
+    --side-col:36px;--top-row:82px;--btm-row:162px;
+    --mini-bw:13px;--mini-bh:20px;
     --mini-vw:18px;--mini-vh:13px;
   }
   .card .ptag{font-size:6px;padding:1px 2px}
@@ -708,7 +710,6 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     --card-w:60px;--card-h:92px;
     --card-fs:19px;--card-num-fs:22px;--card-sym-fs:9px;
     --hand-h:108px;
-    --hand-overlap:-34px;
     --table-size:236px;
     --avatar-sz:40px;
     --side-col:78px;--top-row:120px;--btm-row:206px;
@@ -733,7 +734,6 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     --card-w:64px;--card-h:98px;
     --card-fs:20px;--card-num-fs:23px;--card-sym-fs:10px;
     --hand-h:114px;
-    --hand-overlap:-36px;
     --table-size:252px;
     --avatar-sz:44px;
     --side-col:82px;--top-row:126px;--btm-row:218px;
@@ -748,7 +748,6 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     --card-w:56px;--card-h:86px;
     --card-fs:18px;--card-num-fs:20px;--card-sym-fs:8px;
     --hand-h:102px;
-    --hand-overlap:-32px;
     --table-size:220px;
     --side-col:72px;--top-row:114px;--btm-row:196px;
     --mini-bw:24px;--mini-bh:38px;

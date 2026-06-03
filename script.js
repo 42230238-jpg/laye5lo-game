@@ -1002,6 +1002,7 @@ function render(){
   document.getElementById('root').innerHTML=buildHTML();
   attachEvents();
   updateTimerBar();
+  requestAnimationFrame(adjustHand);
 }
 
 function buildHTML(){
@@ -1514,8 +1515,16 @@ function buildJoinRoomHTML(){
 <div class="menu-screen room-screen">
   <div class="room-panel">
     <h1>Join Room</h1>
-    <p>Enter the room code someone shared with you.</p>
-    <input class="room-input" id="join-room-code" maxlength="7" placeholder="ABC-123" value="${G.joinCode||''}">
+    <p>Enter your name and the room code.</p>
+    <input class="room-input" id="join-player-name" maxlength="14"
+      placeholder="Your name"
+      value="${G.joinName||''}"
+      oninput="G.joinName=this.value"
+      style="text-transform:none;font-size:16px;letter-spacing:0">
+    <input class="room-input" id="join-room-code" maxlength="7"
+      placeholder="ABC-123"
+      value="${G.joinCode||''}"
+      oninput="G.joinCode=this.value.toUpperCase();this.value=G.joinCode">
     ${G.roomMsg?`<div class="room-msg">${G.roomMsg}</div>`:''}
     <div class="room-actions">
       <button class="menu-btn primary" onclick="joinCustomRoom()">Join Room</button>
@@ -1607,7 +1616,7 @@ window.openArba3meye=function(){stopTimer();window.location.href='arba3meye.html
 window.backToGameSelect=function(){initMenu();};
 window.openQuickSetup=function(){stopTimer();G={phase:'quickSetup',modal:null};render();};
 window.quickPlay=function(){initGame();};
-window.openCustomRoom=function(){stopTimer();G={phase:'customRoom',modal:null,roomMode:'choice',roomCode:null,joinCode:'',roomMsg:''};render();};
+window.openCustomRoom=function(){stopTimer();G={phase:'customRoom',modal:null,roomMode:'choice',roomCode:null,joinCode:'',joinName:G.joinName||'',roomMsg:''};render();};
 window.showCreateRoom=function(){G.roomMode='create';G.roomCode=makeRoomCode();G.roomMsg='';render();};
 window.showJoinRoom=function(){G.roomMode='join';G.joinCode='';G.roomMsg='';render();};
 window.enterRoomLobby=function(){
@@ -1615,10 +1624,13 @@ window.enterRoomLobby=function(){
   render();
 };
 window.joinCustomRoom=function(){
-  const input=document.getElementById('join-room-code');
-  const raw=(input&&input.value?input.value:G.joinCode||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const nameEl=document.getElementById('join-player-name');
+  const codeEl=document.getElementById('join-room-code');
+  const name=((nameEl?nameEl.value:G.joinName)||'').trim()||'Player';
+  const raw=((codeEl?codeEl.value:G.joinCode)||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!name||name==='Player'&&!nameEl){G.roomMsg='Enter your name.';render();return;}
   if(raw.length<6){G.roomMsg='Enter a 6-character room code.';render();return;}
-  const name=prompt('Your name:')||'Player';
+  G.joinName=name;
   G.roomMsg='Joining…';render();
   socket.emit('joinRoom',{roomCode:raw,name});
 };
@@ -1704,15 +1716,39 @@ function newRound(){
   ANIM.shuffleAndDeal(()=>{ G.phase='gift'; render(); });
 }
 
+
+// ── HAND OVERLAP ─────────────────────────────────────────
+// Dynamically computes card margin so the hand always fits the
+// available width — matches arba3meye's approach exactly.
+function adjustHand(){
+  const hand=document.getElementById('my-hand');
+  if(!hand)return;
+  // target the wrapper divs (each wraps one rotated card)
+  const wrappers=[...hand.children];
+  const n=wrappers.length;
+  if(n<2)return;
+  const available=hand.getBoundingClientRect().width-4;
+  const firstCard=wrappers[0].querySelector('.card')||wrappers[0];
+  const cardW=firstCard.getBoundingClientRect().width||54;
+  // mg = spacing between card starts (positive = gap, negative = overlap)
+  let mg=Math.floor((available-cardW*n)/(n-1));
+  mg=Math.min(3,mg);                    // never more than 3 px gap
+  mg=Math.max(Math.round(cardW*-0.62),mg); // never overlap more than 62 %
+  wrappers.forEach((w,i)=>{
+    w.style.marginRight=i<n-1?mg+'px':'0';
+  });
+}
+window.addEventListener('resize',()=>requestAnimationFrame(adjustHand));
+
 initMenu();
 window.createOnlineRoom = function () {
   socket.emit("createRoom");
 };
 
 window.joinOnlineRoom = function () {
-  // Navigate to the join-room input screen
   G.roomMode = 'join';
   G.joinCode = '';
+  G.joinName = G.joinName || '';
   G.roomMsg = '';
   render();
 };
