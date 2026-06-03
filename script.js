@@ -623,7 +623,7 @@ let botDifficulty='easy';
 function initMenu(){
   stopTimer();
   mySeatIndex=0;
-  G={phase:'menu',modal:null,roomCode:null,roomMsg:''};
+  G={phase:'gameSelect',modal:null,roomCode:null,roomMsg:''};
   resolving=false;giftedIds=new Set();render();
 }
 
@@ -1006,6 +1006,7 @@ function render(){
 
 function buildHTML(){
   const modal=G.modal?buildModal():'';
+  if(G.phase==='gameSelect')return buildGameSelectHTML()+modal;
   if(G.phase==='menu')return buildMenuHTML()+modal;
   if(G.phase==='quickSetup')return buildQuickSetupHTML()+modal;
   if(G.phase==='customRoom')return buildCustomRoomHTML()+modal;
@@ -1398,6 +1399,31 @@ function buildMenuHTML(){
     <button class="menu-btn primary" onclick="openQuickSetup()">Quick Play</button>
     <button class="menu-btn" onclick="openCustomRoom()">Custom Room</button>
     <button class="menu-btn" onclick="showRules()">Rules</button>
+    <button class="menu-btn subtle" onclick="backToGameSelect()">All Games</button>
+  </div>
+</div>`;
+}
+function buildGameSelectHTML(){
+  return `
+<div class="menu-screen game-select-screen">
+  <div class="menu-mark">
+    <div class="menu-card-stack">
+      <div class="menu-card menu-card-red">5</div>
+      <div class="menu-card menu-card-blue">4</div>
+      <div class="menu-card menu-card-gold">1</div>
+    </div>
+    <h1>Choose a Game</h1>
+    <p>Pick the table you want to play.</p>
+  </div>
+  <div class="game-choice-grid">
+    <button class="game-choice-card" onclick="openLee5aMenu()">
+      <span class="game-choice-title">Lee5a</span>
+      <span class="game-choice-copy">Fast table play. Avoid the points.</span>
+    </button>
+    <button class="game-choice-card" onclick="openArba3meye()">
+      <span class="game-choice-title">Arba3meye</span>
+      <span class="game-choice-copy">Bid, take tricks, and race to the target.</span>
+    </button>
   </div>
 </div>`;
 }
@@ -1576,6 +1602,9 @@ window.newGame=function(){initGame();};
 window.showRules=function(){G.modal={type:'rules'};render();};
 window.closeModal=function(){G.modal=null;render();};
 window.setBotDifficulty=function(level){botDifficulty=level;render();};
+window.openLee5aMenu=function(){stopTimer();G={phase:'menu',modal:null,roomCode:null,roomMsg:''};render();};
+window.openArba3meye=function(){stopTimer();window.location.href='arba3meye.html';};
+window.backToGameSelect=function(){initMenu();};
 window.openQuickSetup=function(){stopTimer();G={phase:'quickSetup',modal:null};render();};
 window.quickPlay=function(){initGame();};
 window.openCustomRoom=function(){stopTimer();G={phase:'customRoom',modal:null,roomMode:'choice',roomCode:null,joinCode:'',roomMsg:''};render();};

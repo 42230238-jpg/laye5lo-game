@@ -287,6 +287,48 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .menu-actions,.room-actions{
   display:flex;flex-direction:column;gap:10px;width:min(260px,88%);
 }
+.game-select-screen{gap:22px}
+.game-choice-grid{
+  width:min(340px,92%);
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+.game-choice-card{
+  width:100%;
+  min-height:86px;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:center;
+  gap:5px;
+  padding:14px 16px;
+  border-radius:14px;
+  border:1.5px solid rgba(255,255,255,0.16);
+  background:rgba(0,0,0,0.34);
+  color:#fff;
+  cursor:pointer;
+  box-shadow:0 8px 22px rgba(0,0,0,0.34);
+  text-align:left;
+  transition:transform 0.15s ease,background 0.15s ease,border-color 0.15s ease;
+}
+.game-choice-card:hover{
+  transform:translateY(-1px);
+  background:rgba(0,0,0,0.44);
+  border-color:rgba(255,224,102,0.36);
+}
+.game-choice-title{
+  color:#ffe066;
+  font-size:20px;
+  font-weight:900;
+  line-height:1;
+}
+.game-choice-copy{
+  color:rgba(255,255,255,0.72);
+  font-size:12px;
+  font-weight:600;
+  line-height:1.35;
+}
 .difficulty-box{
   width:min(300px,90%);display:flex;flex-direction:column;gap:7px;
   background:rgba(0,0,0,0.26);border:1px solid rgba(255,255,255,0.1);

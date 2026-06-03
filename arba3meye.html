@@ -1,0 +1,939 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arba3meye</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:transparent}
+.home-link{
+  position:absolute;top:10px;left:10px;z-index:500;
+  height:32px;padding:0 12px;border-radius:16px;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,0.48);border:1px solid rgba(255,255,255,0.14);
+  color:#ffe066;text-decoration:none;font-size:12px;font-weight:800;
+  box-shadow:0 3px 10px rgba(0,0,0,0.35);
+}
+#game{
+  width:100%;min-height:640px;
+  background:radial-gradient(ellipse at center,#1a6b3a 0%,#0f4a26 55%,#0a3019 100%);
+  border-radius:16px;position:relative;overflow:hidden;
+  display:flex;flex-direction:column;align-items:stretch;
+  padding:0;box-shadow:inset 0 0 60px rgba(0,0,0,0.5);user-select:none;
+}
+#game::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.012) 0px,rgba(255,255,255,0.012) 1px,transparent 1px,transparent 8px)}
+#game::after{content:'';position:absolute;top:8px;left:8px;right:8px;bottom:8px;
+  border-radius:50%;border:3px solid rgba(255,255,255,0.08);pointer-events:none}
+
+/* ── CARD ── */
+.card{position:relative;width:54px;height:82px;border-radius:9px;
+  display:inline-flex;flex-direction:column;align-items:center;justify-content:center;
+  font-weight:700;font-size:18px;border:none;cursor:pointer;flex-shrink:0;
+  box-shadow:2px 4px 10px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.35);
+  transition:transform .18s ease,box-shadow .18s ease;outline:none;overflow:hidden}
+.card::before{content:'';position:absolute;inset:2px;border-radius:7px;
+  border:1.5px solid rgba(255,255,255,0.28);pointer-events:none;z-index:1}
+.card .cnum{font-size:20px;font-weight:800;line-height:1;position:relative;z-index:2}
+.card .csym{font-size:8px;opacity:0.75;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;position:relative;z-index:2}
+.card .corner{position:absolute;font-size:10px;font-weight:800;line-height:1;z-index:2}
+.card .corner.tl{top:4px;left:5px}
+.card .corner.br{bottom:4px;right:5px;transform:rotate(180deg)}
+.cr{background:linear-gradient(160deg,#ff4444 0%,#cc1111 100%);color:#fff}
+.cb{background:linear-gradient(160deg,#3388ff 0%,#1155cc 100%);color:#fff}
+.cg{background:linear-gradient(160deg,#22cc55 0%,#0f8830 100%);color:#fff}
+.cy{background:linear-gradient(160deg,#ffd000 0%,#c89000 100%);color:#1a1200}
+.cback{background:linear-gradient(135deg,#1a3a6b 0%,#0e2248 100%);
+  box-shadow:2px 4px 8px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.15)}
+.cback::after{content:'';position:absolute;inset:4px;border-radius:5px;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px),
+             repeating-linear-gradient(-45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px);
+  border:1px solid rgba(255,255,255,0.1)}
+.card.playable:hover{transform:translateY(-14px);
+  box-shadow:0 0 0 2px rgba(255,255,255,0.6),2px 6px 18px rgba(0,0,0,0.65)}
+.card.unplayable{opacity:0.28;cursor:not-allowed;pointer-events:none}
+
+/* ── AVATARS ── */
+.avatar{width:40px;height:40px;border-radius:50%;
+  background:linear-gradient(135deg,#2a5298,#1e3c72);
+  border:2.5px solid rgba(255,255,255,0.22);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;color:#fff;
+  box-shadow:0 2px 8px rgba(0,0,0,0.5);flex-shrink:0}
+.avatar.active{border-color:#22ee66;box-shadow:0 0 14px rgba(34,238,102,0.8)}
+.pname{font-size:11px;color:rgba(255,255,255,0.82);font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.pscore{font-size:10px;color:rgba(255,220,100,0.9);font-weight:600}
+
+/* ── MINI BACKS ── */
+.mini-back{width:22px;height:34px;border-radius:4px;flex-shrink:0;margin-right:-9px;
+  background:linear-gradient(135deg,#1a3a6b,#0e2248);
+  border:1px solid rgba(255,255,255,0.15);box-shadow:1px 2px 4px rgba(0,0,0,0.5)}
+.mini-back-v{width:28px;height:18px;border-radius:3px;margin-bottom:-6px;
+  background:linear-gradient(135deg,#1a3a6b,#0e2248);
+  border:1px solid rgba(255,255,255,0.15);box-shadow:1px 2px 4px rgba(0,0,0,0.5)}
+
+/* ── TABLE LAYOUT ── */
+#table-wrap{
+  width:100%;flex:1;position:relative;display:grid;
+  grid-template-rows:110px 1fr 190px;
+  grid-template-columns:70px 1fr 70px;
+  grid-template-areas:"top top top" "left mid right" "btm btm btm";
+  gap:4px;min-height:500px;padding:4px 6px;
+}
+.tz-top {grid-area:top;display:flex;justify-content:center;align-items:flex-start;padding-top:4px}
+.tz-left{grid-area:left;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px}
+.tz-mid {grid-area:mid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:160px}
+.tz-right{grid-area:right;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px}
+.tz-btm{grid-area:btm;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;overflow:visible;padding-bottom:6px}
+
+/* ── TRICK ZONE ── */
+.table-played{position:relative;width:210px;height:200px;flex-shrink:0}
+.played-slot{position:absolute;display:flex;flex-direction:column;align-items:center;gap:2px}
+.slot-bottom{bottom:0;left:50%;transform:translateX(-50%)}
+.slot-top{top:0;left:50%;transform:translateX(-50%)}
+.slot-left{left:0;top:50%;transform:translateY(-50%)}
+.slot-right{right:0;top:50%;transform:translateY(-50%)}
+.played-name{font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.9);order:-1;white-space:nowrap}
+.slot-bottom .played-name{order:1}
+
+/* ── STATUS / CHIPS ── */
+.status-bar{background:rgba(0,0,0,0.45);border-radius:20px;padding:5px 18px;
+  font-size:12px;color:rgba(255,255,255,0.9);font-weight:600;
+  text-shadow:0 1px 2px rgba(0,0,0,.8);border:1px solid rgba(255,255,255,0.1);min-width:190px;text-align:center}
+.lead-chip{background:rgba(0,0,0,0.4);border-radius:12px;padding:3px 12px;
+  font-size:10px;color:rgba(255,220,100,0.9);font-weight:600;border:1px solid rgba(255,220,100,0.3)}
+
+/* ── SCORE STRIP ── */
+.score-strip{display:flex;gap:10px;align-items:center;background:rgba(0,0,0,0.4);
+  border-radius:20px;padding:4px 14px;border:1px solid rgba(255,255,255,0.08)}
+.score-item{text-align:center}
+.score-item .sn{font-size:9px;color:rgba(255,255,255,0.52);font-weight:600}
+.score-item .sv{font-size:14px;font-weight:800;color:#ffe066}
+
+/* ── TOP BAR ── */
+#top-bar{display:flex;justify-content:space-between;align-items:center;
+  padding:8px 10px 4px;position:relative;z-index:5}
+
+/* ── MY HAND ── */
+#my-hand{height:92px;overflow:visible;display:flex;justify-content:center;
+  align-items:flex-end;flex-wrap:nowrap;gap:3px;padding:0}
+
+/* ── BUTTONS — LEE5A STYLE ── */
+.menu-btn{
+  width:220px;height:44px;border-radius:22px;
+  font-size:14px;font-weight:700;cursor:pointer;
+  border:1.5px solid rgba(255,255,255,0.18);
+  transition:transform .15s ease,filter .15s ease;
+  letter-spacing:.3px;
+}
+.menu-btn:hover{transform:translateY(-2px);filter:brightness(1.12)}
+.menu-btn:active{transform:scale(0.97)}
+.btn-gold{background:linear-gradient(135deg,#e6b800,#b88a00);color:#1a1200;
+  box-shadow:0 4px 14px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.25)}
+.btn-outline{background:rgba(255,255,255,0.07);color:#fff;
+  border:1.5px solid rgba(255,255,255,0.25);
+  box-shadow:0 2px 8px rgba(0,0,0,0.3)}
+.btn-subtle{background:rgba(0,0,0,0.3);color:rgba(255,255,255,0.75);
+  border:1.5px solid rgba(255,255,255,0.12)}
+
+/* ── BID BUTTONS ── */
+.bid-panel{background:rgba(0,0,0,0.52);border-radius:14px;padding:12px 16px;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  border:1px solid rgba(255,255,255,0.1);position:relative;z-index:10}
+.bid-title{color:rgba(255,255,255,0.88);font-size:12px;font-weight:700}
+.bid-hint{color:rgba(255,220,100,0.85);font-size:10px;font-weight:600}
+.bid-btns{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
+.bid-btn{width:36px;height:36px;border-radius:8px;
+  border:1px solid rgba(255,255,255,0.18);
+  background:rgba(255,255,255,0.1);color:#fff;
+  font-size:14px;font-weight:800;cursor:pointer;transition:all .12s}
+.bid-btn:hover{background:rgba(200,144,0,0.75);border-color:rgba(255,224,102,0.55);transform:scale(1.12)}
+
+/* ── DIFF BUTTONS ── */
+.diff-row{display:flex;gap:8px;justify-content:center}
+.diff-btn{height:32px;padding:0 18px;border-radius:16px;
+  border:1.5px solid rgba(255,255,255,0.16);
+  background:rgba(255,255,255,0.08);color:#fff;
+  font-size:12px;font-weight:700;cursor:pointer;transition:all .15s}
+.diff-btn:hover{background:rgba(255,255,255,0.16)}
+.diff-btn.active{background:linear-gradient(135deg,#c89000,#9d6d00);border-color:rgba(255,224,102,0.4)}
+
+/* ── MODAL ── */
+.modal-bg{position:absolute;inset:0;background:rgba(0,0,0,0.72);
+  display:flex;align-items:center;justify-content:center;z-index:60;border-radius:16px}
+.modal-box{background:linear-gradient(160deg,#1a3a1a,#0e240e);border-radius:14px;
+  padding:22px;width:300px;border:1px solid rgba(255,255,255,0.15);
+  box-shadow:0 8px 32px rgba(0,0,0,0.8)}
+.modal-box h3{color:#ffe066;font-size:17px;font-weight:800;margin-bottom:12px;text-align:center}
+.modal-rows{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:10px 0}
+.modal-row{background:rgba(255,255,255,0.07);border-radius:8px;padding:8px;text-align:center}
+.modal-row .mn{font-size:10px;color:rgba(255,255,255,0.55);margin-bottom:2px}
+.modal-row .mv{font-size:16px;font-weight:800;color:#fff}
+.modal-row.win .mv{color:#4ade80}
+.modal-row.lose .mv{color:#f87171}
+
+/* ── TRICK WINS BAR ── */
+.twbar{display:flex;gap:10px;font-size:10px;color:rgba(255,255,255,0.6);justify-content:center}
+.twbar b{color:#ffe066}
+
+/* ── RULES ── */
+.rules-wrap{padding:18px 16px;display:flex;flex-direction:column;gap:9px;overflow-y:auto;max-height:620px}
+.rules-wrap h2{color:#ffe066;font-size:19px;font-weight:800;text-align:center;margin-bottom:2px}
+.rule-block{background:rgba(0,0,0,0.3);border-left:3px solid rgba(200,144,0,0.7);border-radius:0 10px 10px 0;padding:8px 12px}
+.rule-block .rt{color:#ffe066;font-size:12px;font-weight:700;margin-bottom:2px}
+.rule-block .rb{color:rgba(255,255,255,0.7);font-size:11px;line-height:1.55}
+
+/* ── ANIM LAYER ── */
+#anim-layer{position:absolute;inset:0;z-index:100;pointer-events:none;overflow:hidden;border-radius:16px}
+
+/* ── FLY CARD ── */
+/* ── FLY CARD — matches reference style ── */
+.fly-card{
+  position:fixed;width:54px;height:82px;border-radius:9px;
+  font-weight:700;font-size:18px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  box-shadow:4px 8px 24px rgba(0,0,0,0.7);
+  pointer-events:none;z-index:9999;
+  will-change:left,top,opacity;
+  transition:left 0.32s cubic-bezier(.4,0,.2,1),
+             top  0.32s cubic-bezier(.4,0,.2,1),
+             opacity 0.18s ease;
+}
+.fly-card.fly-active{opacity:1}
+.fly-card.fly-done{opacity:0;transition:opacity 0.12s ease}
+.fly-card .fly-label{font-size:22px;font-weight:800;line-height:1;color:inherit;position:relative;z-index:2}
+.fly-card .fly-sym{font-size:9px;opacity:0.75;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;position:relative;z-index:2}
+.fly-card::before{content:'';position:absolute;inset:2px;border-radius:7px;
+  border:1.5px solid rgba(255,255,255,0.28);pointer-events:none}
+
+/* ── DEAL CARD (flies outward from deck during deal animation) ── */
+.deal-card{
+  position:absolute;width:40px;height:60px;border-radius:7px;
+  background:linear-gradient(135deg,#1a3a6b,#0e2248);
+  border:1.5px solid rgba(255,255,255,0.18);
+  box-shadow:2px 4px 12px rgba(0,0,0,0.65);
+  pointer-events:none;will-change:transform,opacity;
+}
+.deal-card::after{
+  content:'';position:absolute;inset:3px;border-radius:4px;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px);
+}
+
+/* ── TABLE CARD DROP-IN ── */
+@keyframes drop-in{
+  0%  {transform:translateY(-12px) scale(0.88);opacity:0}
+  60% {transform:translateY(3px) scale(1.04);opacity:1}
+  100%{transform:none;opacity:1}
+}
+.table-card{animation:drop-in 0.24s cubic-bezier(.22,.68,.6,1.1) both}
+
+/* ── SHUFFLE OVERLAY ── */
+#shuf-ov{position:absolute;inset:0;z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(10,48,25,0.9);border-radius:16px;pointer-events:none}
+#shuf-deck{position:relative;width:60px;height:88px}
+.sd{position:absolute;inset:0;border-radius:9px;
+  background:linear-gradient(135deg,#1a3a6b,#0e2248);
+  border:1.5px solid rgba(255,255,255,0.2);box-shadow:2px 4px 10px rgba(0,0,0,0.6);
+  will-change:transform,opacity}
+.sd::after{content:'';position:absolute;inset:4px;border-radius:5px;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px),
+             repeating-linear-gradient(-45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px)}
+#shuf-lbl{margin-top:16px;color:rgba(255,255,255,0.72);font-size:13px;font-weight:700;letter-spacing:.5px;text-shadow:0 2px 6px rgba(0,0,0,.8)}
+
+/* deal-out keyframes — card flies from deck center outward to each player */
+@keyframes sdeal-top{
+  0%  {transform:translate(0,0)rotate(0deg);opacity:1}
+  100%{transform:translate(0,-230px)rotate(-5deg);opacity:0}
+}
+@keyframes sdeal-right{
+  0%  {transform:translate(0,0)rotate(0deg);opacity:1}
+  100%{transform:translate(220px,0)rotate(5deg);opacity:0}
+}
+@keyframes sdeal-bottom{
+  0%  {transform:translate(0,0)rotate(0deg);opacity:1}
+  100%{transform:translate(0,230px)rotate(5deg);opacity:0}
+}
+@keyframes sdeal-left{
+  0%  {transform:translate(0,0)rotate(0deg);opacity:1}
+  100%{transform:translate(-220px,0)rotate(-5deg);opacity:0}
+}
+
+/* smoother shuffle keyframes */
+@keyframes sL{
+  0%  {transform:translate(0,0)rotate(0deg)}
+  30% {transform:translate(-28px,-4px)rotate(-6deg)}
+  60% {transform:translate(0,0)rotate(0deg)}
+  100%{transform:translate(0,0)rotate(0deg)}
+}
+@keyframes sR{
+  0%  {transform:translate(0,0)rotate(0deg)}
+  30% {transform:translate(28px,4px)rotate(6deg)}
+  60% {transform:translate(0,0)rotate(0deg)}
+  100%{transform:translate(0,0)rotate(0deg)}
+}
+@keyframes fsin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.45}}
+
+/* ── CARD LAUNCH (pops at source before flying) ── */
+@keyframes card-launch{
+  0%  {transform:scale(0.95) rotate(0deg) translateY(0)}
+  55% {transform:scale(1.2) rotate(-6deg) translateY(-14px)}
+  100%{transform:scale(1.12) rotate(-4deg) translateY(-10px)}
+}
+
+/* ── TRICK SWEEP (cards fly to winner — position:fixed like reference style) ── */
+.sweep-card{
+  position:fixed;width:54px;height:82px;border-radius:9px;
+  pointer-events:none;z-index:9999;
+  will-change:transform,opacity;
+  transition:transform 0.45s cubic-bezier(.4,0,.6,1),opacity 0.45s ease;
+}
+
+/* ── WIN BURST (golden ring at winner's spot) ── */
+@keyframes win-burst{
+  0%  {transform:scale(0.6);opacity:0.9}
+  60% {transform:scale(1.8);opacity:0.55}
+  100%{transform:scale(2.4);opacity:0}
+}
+.win-ring{
+  position:absolute;width:56px;height:56px;border-radius:50%;
+  border:3px solid #ffe066;pointer-events:none;z-index:260;
+  animation:win-burst 0.6s ease-out forwards;
+}
+
+.menu-card-stack{width:140px;height:108px;position:relative;margin:0 auto 6px}
+.mc{position:absolute;width:58px;height:86px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:900;color:#fff;
+  border:1.5px solid rgba(255,255,255,0.25);
+  box-shadow:2px 7px 18px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.35)}
+.mc::before{content:'';position:absolute;inset:3px;border-radius:7px;border:1px solid rgba(255,255,255,0.22)}
+</style>
+
+<body>
+<a class="home-link" href="index.html">All Games</a>
+<div id="game">
+  <div id="anim-layer"></div>
+  <div id="app" style="width:100%;flex:1;display:flex;flex-direction:column"></div>
+</div>
+
+<script>
+// ════════════════════════════════════
+// ENGINE
+// ════════════════════════════════════
+const COLORS=['red','blue','yellow','green'];
+const RANKS=['1','skip','+2','reverse','0','9','8','7','6','5','4','3','2'];
+const RV={'1':13,'skip':12,'+2':11,'reverse':10,'0':9,'9':8,'8':7,'7':6,'6':5,'5':4,'4':3,'3':2,'2':1};
+const SCRTBL={2:2,3:3,4:4,5:10,6:12,7:14,8:16,9:27};
+const CC={red:'cr',blue:'cb',yellow:'cy',green:'cg'};
+const RD={'1':'1','skip':'⊘','+2':'+2','reverse':'↺','0':'0','9':'9','8':'8','7':'7','6':'6','5':'5','4':'4','3':'3','2':'2'};
+const WIN=41;
+const NAMES=['You','Bot 1','Bot 2','Bot 3'];
+
+function mkDeck(){const d=[];for(const c of COLORS)for(const r of RANKS)d.push({id:c+r,color:c,rank:r});return d;}
+function shuf(d){const a=[...d];for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+function deal(d){const h=[[],[],[],[]];d.forEach((c,i)=>h[i%4].push(c));return h;}
+
+function cmp(a,b,led){
+  const ar=a.color==='red', br=b.color==='red';
+  if(ar&&!br)return 1; if(br&&!ar)return -1;
+  if(ar&&br)return RV[a.rank]-RV[b.rank];
+  const al=a.color===led, bl=b.color===led;
+  if(al&&!bl)return 1; if(bl&&!al)return -1;
+  return RV[a.rank]-RV[b.rank];
+}
+function trickWin(trick,led){
+  let best=0;
+  for(let i=1;i<trick.length;i++)if(cmp(trick[i].card,trick[best].card,led)>0)best=i;
+  return trick[best].pid;
+}
+function legal(hand,led,isLead){
+  if(isLead||!led)return hand;
+  const m=hand.filter(c=>c.color===led);
+  return m.length?m:hand;
+}
+function pts(bid,won){return (won>=bid?1:-1)*(SCRTBL[bid]??bid);}
+
+// ─── BOTS ───────────────────────────
+function botBid(hand,diff){
+  // Estimate expected tricks per card:
+  //   Red (trump): base 0.5 + rank bonus → range ~0.54 (red 2) to ~1.0 (red 1)
+  //     Low reds lose to opponents' higher reds, so they're not worth a full trick.
+  //   Non-red: only very high ranks contribute — they get beaten by any trump.
+  let est=0;
+  for(const c of hand){
+    if(c.color==='red'){
+      est += 0.5 + (RV[c.rank]/13)*0.5;  // 0.54 – 1.0
+    } else {
+      if(RV[c.rank]>=12)      est+=0.30; // '1','skip' — reliably win if their color is led
+      else if(RV[c.rank]>=10) est+=0.15; // '+2','reverse'
+      else if(RV[c.rank]>=8)  est+=0.05; // '0','9' — occasionally
+    }
+  }
+  // Difficulty shaping:
+  //   easy  — noisy; can over-bid or under-bid randomly
+  //   medium — 12% conservative discount; the penalty jump at bid 5 (±2→±10) rewards caution
+  //   hard  — use raw estimate; precise
+  if(diff==='easy')        est+=Math.random()*2-0.5;
+  else if(diff==='medium') est*=0.88;
+  return Math.max(2,Math.min(9,Math.round(est)));
+}
+function botCard(hand,trick,led,diff,partnerLeading){
+  const lg=legal(hand,led,trick.length===0);
+  if(diff==='easy')return lg[Math.random()*lg.length|0];
+  if(trick.length===0)return [...lg].sort((a,b)=>cmp(b,a,null))[0];
+  const best=trick.reduce((w,t)=>cmp(t.card,w.card,led)>0?t:w,trick[0]);
+  if(partnerLeading&&lg.length>1){
+    const nt=lg.filter(c=>c.color!=='red');
+    return [...(nt.length?nt:lg)].sort((a,b)=>RV[a.rank]-RV[b.rank])[0];
+  }
+  const winners=lg.filter(c=>cmp(c,best.card,led)>0).sort((a,b)=>RV[a.rank]-RV[b.rank]);
+  if(winners.length)return winners[0];
+  return [...lg].sort((a,b)=>RV[a.rank]-RV[b.rank])[0];
+}
+
+// ════════════════════════════════════
+// STATE
+// ════════════════════════════════════
+let G={
+  screen:'menu',diff:'medium',
+  phase:'',hands:[[],[],[],[]],
+  bids:[null,null,null,null],bidIdx:0,
+  trick:[],led:null,
+  wins:[0,0,0,0],scores:[0,0,0,0],
+  cur:0,round:1,busy:false,winner:null
+};
+let BT=null;
+
+function resetRound(keepScores){
+  const deck=shuf(mkDeck());
+  const hands=deal(deck);
+  return{...G,
+    phase:'bidding',hands,
+    bids:[null,null,null,null],bidIdx:0,
+    trick:[],led:null,
+    wins:[0,0,0,0],
+    scores:keepScores?G.scores:[0,0,0,0],
+    cur:0,busy:false,winner:null,
+    round:keepScores?G.round+1:1
+  };
+}
+
+// ════════════════════════════════════
+// RENDER
+// ════════════════════════════════════
+function r(){
+  const app=document.getElementById('app');
+  if(!app)return;
+  if(G.screen==='menu'){app.innerHTML=menuHTML();return;}
+  if(G.screen==='rules'){app.innerHTML=rulesHTML();return;}
+  app.innerHTML=gameHTML();
+  // attach hand click once
+  const hEl=document.getElementById('my-hand');
+  if(hEl) hEl.onclick=e=>{
+    const c=e.target.closest('.card.playable');
+    if(!c)return;
+    const card=G.hands[0].find(x=>x.id===c.dataset.id);
+    if(card)playerPlay(card);
+  };
+  requestAnimationFrame(adjustHand);
+  sched();
+}
+
+// ─── MENU ────────────────────────────
+function menuHTML(){
+  const notes={easy:'Random play, loose bids',medium:'Avoids trump waste, aids partner',hard:'Tracks cards, blocks enemies'};
+  return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:32px 18px;text-align:center;position:relative;z-index:2">
+  <div>
+    <div class="menu-card-stack">
+      <div class="mc" style="left:4px;top:16px;transform:rotate(-16deg);background:linear-gradient(160deg,#ff4444,#cc1111)">+2</div>
+      <div class="mc" style="left:40px;top:2px;transform:rotate(0deg);background:linear-gradient(160deg,#3388ff,#1155cc)">0</div>
+      <div class="mc" style="right:4px;top:16px;transform:rotate(16deg);background:linear-gradient(160deg,#ffd000,#c89000);color:#1a1200">1</div>
+    </div>
+    <div style="color:#ffe066;font-size:34px;font-weight:800;text-shadow:0 3px 12px rgba(0,0,0,.7);letter-spacing:-0.5px">Arba3meye</div>
+    <div style="color:rgba(255,255,255,0.6);font-size:12px;margin-top:3px">400 · Trick-taking card game</div>
+  </div>
+  <div style="background:rgba(0,0,0,0.28);border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:12px 16px;width:240px">
+    <div style="color:rgba(255,255,255,0.6);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Bot Difficulty</div>
+    <div class="diff-row">
+      ${['easy','medium','hard'].map(d=>`<button class="diff-btn${G.diff===d?' active':''}" onclick="setDiff('${d}')">${d}</button>`).join('')}
+    </div>
+    <div style="margin-top:7px;color:rgba(255,255,255,0.55);font-size:10px;font-weight:600">${notes[G.diff]}</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+    <button class="menu-btn btn-gold" onclick="startGame()">Quick Play</button>
+    <button class="menu-btn btn-outline" onclick="G.screen='rules';r()">Rules</button>
+  </div>
+</div>`;
+}
+
+// ─── RULES ───────────────────────────
+function rulesHTML(){
+  const rules=[
+    ['Deck','52 UNO-style cards — 4 colors × 13 ranks. Cards act as ranked cards only; UNO effects do not apply.'],
+    ['Trump','Red is always trump. Any red card beats any non-red card, regardless of rank.'],
+    ['Ranking','1 > Skip > +2 > Reverse > 0 > 9 > 8 > 7 > 6 > 5 > 4 > 3 > 2'],
+    ['Teams','You & Bot 2 are partners (Team A). Bot 1 & Bot 3 are partners (Team B).'],
+    ['Bidding','Each player bids 2–9 tricks. If total bids < 11, cards are redealt and everyone bids again.'],
+    ['Follow suit','You must play the led color if you have it. If void, play anything.'],
+    ['Scoring','Meet bid → +points. Fail → −points. 2–4 = face value. 5=±10, 6=±12, 7=±14, 8=±16, 9=±27.'],
+    ['Winning','First team/player to reach 41 points wins!'],
+  ];
+  return`<div class="rules-wrap" style="position:relative;z-index:2">
+  <button onclick="G.screen='menu';r()" style="position:absolute;top:0;left:0;background:rgba(0,0,0,0.42);border:1.5px solid rgba(255,255,255,0.18);color:#ffe066;border-radius:50%;width:36px;height:36px;font-size:20px;cursor:pointer;font-weight:700;display:flex;align-items:center;justify-content:center">‹</button>
+  <h2>Rules — Arba3meye</h2>
+  ${rules.map(([t,b])=>`<div class="rule-block"><div class="rt">${t}</div><div class="rb">${b}</div></div>`).join('')}
+  <button class="menu-btn btn-gold" onclick="startGame()" style="align-self:center;margin-top:6px">Quick Play</button>
+</div>`;
+}
+
+// ─── GAME TABLE ───────────────────────
+function gameHTML(){
+  const myTurn=G.phase==='playing'&&G.cur===0&&!G.busy;
+  const lset=myTurn?new Set(legal(G.hands[0],G.led,G.trick.length===0).map(c=>c.id)):new Set();
+  const myHand=[...G.hands[0]].sort((a,b)=>{const ci=COLORS.indexOf(a.color)-COLORS.indexOf(b.color);return ci||RV[b.rank]-RV[a.rank];});
+
+  // Trick area
+  const slotCls={0:'slot-bottom',1:'slot-right',2:'slot-top',3:'slot-left'};
+  const trickHTML=G.trick.map(({pid,card})=>`
+<div class="played-slot ${slotCls[pid]}">
+  <div class="played-name">${NAMES[pid]}</div>
+  ${cHTML(card,54)}
+</div>`).join('');
+
+  // Overlay: bid or status
+  let midContent='';
+  if(G.phase==='bidding'&&G.bidIdx===0){
+    const rc=G.hands[0].filter(c=>c.color==='red').length;
+    const hc=G.hands[0].filter(c=>RV[c.rank]>=10).length;
+    const otherBids=G.bids.slice(1).map((b,i)=>b!=null?`<span style="color:rgba(255,255,255,0.5)">${NAMES[i+1]}:</span> <b style="color:#ffe066">${b}</b>`:``).filter(Boolean).join('&nbsp; ');
+    midContent=`
+<div class="bid-panel">
+  <div class="bid-title">Your Bid (min 2)</div>
+  <div class="bid-hint">${rc} red · ${hc} high cards</div>
+  <div class="bid-btns">${[2,3,4,5,6,7,8,9].map(b=>`<button class="bid-btn" onclick="doBid(${b})">${b}</button>`).join('')}</div>
+  ${otherBids?`<div style="font-size:10px;margin-top:2px">${otherBids}</div>`:''}
+</div>`;
+  } else if(G.phase==='bidding'){
+    midContent=`<div class="status-bar">${NAMES[G.bidIdx]} is bidding…</div>`;
+  } else if(G.phase==='playing'){
+    let st;
+    if(G.trick.length===4){
+      const winner=NAMES[G.cur];
+      st=`<div class="status-bar" style="color:#ffe066;border-color:rgba(255,220,100,0.4);animation:fsin .2s ease">${winner==='You'?'You win':'<b>'+winner+'</b> wins'} the trick!</div>`;
+    } else if(myTurn){
+      st=`<div class="status-bar" style="color:#4ade80;border-color:rgba(34,238,102,0.3)">Your turn — play a card</div>`;
+    } else {
+      st=`<div class="status-bar">${NAMES[G.cur]}'s turn</div>`;
+    }
+    const lc=G.led?`<div class="lead-chip">Led: <b>${G.led}${G.led==='red'?' 🔴':''}</b></div>`:'';
+    const tz=`<div class="table-played">${trickHTML||'<div style="width:210px;height:200px;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,255,255,0.3)">Trick Area</div>'}</div>`;
+    const tw=`<div class="twbar">${[0,1,2,3].map(i=>`${NAMES[i]}: <b>${G.wins[i]}</b>${G.bids[i]!=null?`/<span style="opacity:.5">${G.bids[i]}</span>`:''}`).join(' · ')}</div>`;
+    midContent=st+lc+tz+tw;
+  }
+
+  // Bot hand renders
+  function topH(pid){const n=Math.min(G.hands[pid].length,11);return`<div style="display:flex;margin-left:-9px">${[...Array(n)].map((_,i)=>`<div class="mini-back" style="z-index:${i}"></div>`).join('')}</div>`;}
+  function sideH(pid){const n=Math.min(G.hands[pid].length,8);return`<div style="display:flex;flex-direction:column">${[...Array(n)].map((_,i)=>`<div class="mini-back-v" style="z-index:${i}"></div>`).join('')}</div>`;}
+
+  // Avatar colors
+  const avColor={0:'linear-gradient(135deg,#2a5298,#1e3c72)',1:'linear-gradient(135deg,#7c3aed,#5b21b6)',2:'linear-gradient(135deg,#059669,#065f46)',3:'linear-gradient(135deg,#dc2626,#991b1b)'};
+  function av(pid,label){return`<div class="avatar${G.cur===pid&&G.phase==='playing'?' active':''}" style="background:${avColor[pid]}">${label}</div>`;}
+
+  // Modal
+  let modal='';
+  if(G.phase==='roundover'||G.phase==='gameover'){
+    const rows=G.bids.map((b,i)=>{const p=b!=null?pts(b,G.wins[i]):0;const w=p>0;
+      return`<div class="modal-row ${w?'win':'lose'}"><div class="mn">${NAMES[i]}</div><div class="mv">${w?'+':''}${p}</div><div style="font-size:9px;color:rgba(255,255,255,.45)">bid ${b??'—'} · won ${G.wins[i]}</div></div>`;}).join('');
+    const sa=G.scores[0]+G.scores[2], sb=G.scores[1]+G.scores[3];
+    if(G.phase==='roundover'){
+      modal=`<div class="modal-bg"><div class="modal-box">
+        <h3>Round ${G.round} Over</h3>
+        <div class="modal-rows">${rows}</div>
+        <div style="display:flex;justify-content:space-around;font-size:11px;color:rgba(255,255,255,.6);margin-bottom:10px">
+          <span>Team A: <b style="color:#4ade80">${sa}</b></span>
+          <span>Team B: <b style="color:#f87171">${sb}</b></span>
+        </div>
+        <button class="menu-btn btn-gold" onclick="nextRound()" style="width:100%">Next Round</button>
+      </div></div>`;
+    } else {
+      modal=`<div class="modal-bg"><div class="modal-box">
+        <h3 style="font-size:22px">🎉 Game Over!</h3>
+        <p style="color:#fff;text-align:center;margin-bottom:14px;font-weight:700">${G.winner} wins!</p>
+        <div class="modal-rows">${[0,1,2,3].map(i=>`<div class="modal-row"><div class="mn">${NAMES[i]}</div><div class="mv" style="color:${G.scores[i]>=WIN?'#ffe066':'#fff'}">${G.scores[i]}</div></div>`).join('')}</div>
+        <button class="menu-btn btn-gold" onclick="goMenu()" style="width:100%;margin-top:10px">Main Menu</button>
+      </div></div>`;
+    }
+  }
+
+  return`
+<div id="top-bar" style="position:relative;z-index:5">
+  <button class="menu-btn btn-subtle" onclick="goMenu()" style="width:auto;height:32px;padding:0 14px;font-size:12px">‹ Menu</button>
+  <div class="score-strip">
+    ${[0,1,2,3].map(i=>`<div class="score-item"><div class="sn">${NAMES[i]}</div><div class="sv">${G.scores[i]}</div></div>`).join('<div style="width:1px;height:22px;background:rgba(255,255,255,0.1)"></div>')}
+  </div>
+  <div style="font-size:10px;color:rgba(255,255,255,.4);font-weight:700;min-width:28px;text-align:right">R${G.round}</div>
+</div>
+<div id="table-wrap">
+  <div class="tz-top">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+      ${av(2,'B2')}
+      <div class="pname">${NAMES[2]}</div>
+      <div class="pscore">${G.wins[2]}${G.bids[2]!=null?'/'+G.bids[2]:''}</div>
+      ${topH(2)}
+    </div>
+  </div>
+  <div class="tz-left">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+      ${av(3,'B3')}
+      <div class="pname">${NAMES[3]}</div>
+      <div class="pscore">${G.wins[3]}${G.bids[3]!=null?'/'+G.bids[3]:''}</div>
+      ${sideH(3)}
+    </div>
+  </div>
+  <div class="tz-mid">${midContent}</div>
+  <div class="tz-right">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+      ${av(1,'B1')}
+      <div class="pname">${NAMES[1]}</div>
+      <div class="pscore">${G.wins[1]}${G.bids[1]!=null?'/'+G.bids[1]:''}</div>
+      ${sideH(1)}
+    </div>
+  </div>
+  <div class="tz-btm">
+    <div style="display:flex;align-items:center;gap:8px">
+      ${av(0,'YOU')}
+      <div>
+        <div class="pname">You${G.bids[0]!=null?' · bid '+G.bids[0]+' · won '+G.wins[0]:''}</div>
+        ${myTurn?`<div style="font-size:10px;color:#4ade80;font-weight:700;animation:pulse 1.1s infinite">▶ Your turn</div>`:''}
+      </div>
+    </div>
+    <div id="my-hand">
+      ${myHand.map(c=>{const pl=lset.has(c.id);const un=myTurn&&!pl;
+        return`<div class="card ${CC[c.color]}${pl?' playable':''}${un?' unplayable':''}" data-id="${c.id}">
+          <span class="corner tl">${RD[c.rank]}</span>
+          <span class="cnum">${RD[c.rank]}</span>
+          <span class="csym">${c.color}</span>
+          <span class="corner br">${RD[c.rank]}</span>
+        </div>`;}).join('')}
+    </div>
+  </div>
+</div>
+${modal}`;
+}
+
+function cHTML(card,sz){
+  return`<div class="card table-card ${CC[card.color]}" style="width:${sz}px;height:${sz*1.52|0}px;cursor:default">
+    <span class="corner tl">${RD[card.rank]}</span>
+    <span class="cnum">${RD[card.rank]}</span>
+    <span class="csym">${card.color}</span>
+    <span class="corner br">${RD[card.rank]}</span>
+  </div>`;
+}
+
+// ════════════════════════════════════
+// ACTIONS
+// ════════════════════════════════════
+function setDiff(d){G.diff=d;r();}
+function goMenu(){clearBT();G.screen='menu';r();}
+function clearBT(){if(BT){clearTimeout(BT);BT=null;}}
+
+function startGame(){
+  clearBT();
+  G=resetRound(false);
+  G.screen='game';
+  showShuf(()=>{r();});
+}
+function nextRound(){
+  clearBT();
+  G=resetRound(true);
+  showShuf(()=>{r();});
+}
+
+function doBid(b){
+  if(G.phase!=='bidding'||G.bidIdx!==0||G.busy)return;
+  applyBid(b);
+}
+
+function applyBid(b){
+  G.bids[G.bidIdx]=b;
+  G.bidIdx++;
+  if(G.bidIdx<4){r();return;}
+  // all bids done
+  const tot=G.bids.reduce((s,x)=>s+x,0);
+  if(tot<11){
+    // redeal
+    const deck=shuf(mkDeck());
+    G.hands=deal(deck);
+    G.bids=[null,null,null,null];
+    G.bidIdx=0;
+    showShuf(()=>{r();});
+    return;
+  }
+  G.phase='playing';
+  G.cur=0;
+  r();
+}
+
+function sched(){
+  clearBT();
+  if(G.screen!=='game')return;
+  // bot bidding
+  if(G.phase==='bidding'&&G.bidIdx>0&&G.bidIdx<4){
+    BT=setTimeout(()=>{
+      applyBid(botBid(G.hands[G.bidIdx],G.diff));
+    },500);
+    return;
+  }
+  // bot playing
+  if(G.phase==='playing'&&G.cur!==0&&!G.busy){
+    BT=setTimeout(()=>{
+      if(G.phase!=='playing'||G.cur===0)return;
+      const pid=G.cur;
+      const partnerLeading=G.trick.length>0&&trickWin(G.trick,G.led)===(pid+2)%4;
+      const card=botCard(G.hands[pid],G.trick,G.led,G.diff,partnerLeading);
+      G.busy=true;
+      flyCard(pid,card,()=>{
+        const trickDone=execPlay(pid,card);
+        G.busy=false;
+        if(trickDone){
+          renderOnly(); // show all 4 cards on table
+          G.busy=true;
+          BT=setTimeout(()=>sweepTrick(G.cur),700);  // sweep at 700ms
+          BT=setTimeout(()=>{finishTrick();G.busy=false;r();},1500);
+        } else {
+          r();
+        }
+      });
+    },600);
+  }
+}
+
+function playerPlay(card){
+  if(G.phase!=='playing'||G.cur!==0||G.busy)return;
+  const lg=legal(G.hands[0],G.led,G.trick.length===0);
+  if(!lg.find(c=>c.id===card.id))return;
+  G.busy=true;
+  flyCard(0,card,()=>{
+    const trickDone=execPlay(0,card);
+    G.busy=false;
+    if(trickDone){
+      renderOnly(); // show all 4 cards on table
+      G.busy=true;
+      BT=setTimeout(()=>sweepTrick(G.cur),700);  // sweep at 700ms
+      BT=setTimeout(()=>{finishTrick();G.busy=false;r();},1500);
+    } else {
+      r();
+    }
+  });
+}
+
+function execPlay(pid,card){
+  // remove from hand
+  G.hands[pid]=G.hands[pid].filter(c=>c.id!==card.id);
+  // set led color on first card of trick
+  if(G.trick.length===0) G.led=card.color;
+  G.trick=[...G.trick,{pid,card}];
+
+  if(G.trick.length<4){
+    G.cur=(pid+1)%4;
+    return false; // trick not yet complete
+  }
+
+  // trick complete — record winner but KEEP cards on table for 1.5s display
+  const win=trickWin(G.trick,G.led);
+  G.wins[win]++;
+  G.cur=win;
+  return true; // caller must schedule finishTrick() after display delay
+}
+
+function finishTrick(){
+  // called after 1.5s display — clear table and handle round/game end
+  G.trick=[];
+  G.led=null;
+  if(G.hands[0].length===0){
+    for(let i=0;i<4;i++) G.scores[i]+=pts(G.bids[i],G.wins[i]);
+    const gameOver=G.scores.some(s=>s>=WIN)||G.scores.some(s=>s<=-WIN);
+    if(gameOver){
+      const a=G.scores[0]+G.scores[2], b=G.scores[1]+G.scores[3];
+      G.winner=a>b?'Team A (You & Bot 2)':'Team B (Bot 1 & Bot 3)';
+      G.phase='gameover';
+    } else {
+      G.phase='roundover';
+    }
+  }
+}
+
+// render without calling sched — used during the trick-display pause
+function renderOnly(){
+  const app=document.getElementById('app');
+  if(!app)return;
+  if(G.screen==='menu'){app.innerHTML=menuHTML();return;}
+  if(G.screen==='rules'){app.innerHTML=rulesHTML();return;}
+  app.innerHTML=gameHTML();
+  const hEl=document.getElementById('my-hand');
+  if(hEl) hEl.onclick=e=>{
+    const c=e.target.closest('.card.playable');
+    if(!c)return;
+    const card=G.hands[0].find(x=>x.id===c.dataset.id);
+    if(card)playerPlay(card);
+  };
+  requestAnimationFrame(adjustHand);
+}
+
+// ════════════════════════════════════
+// ANIMATIONS
+// ════════════════════════════════════
+function flyCard(pid,card,cb){
+  const gEl=document.getElementById('game');
+  if(!gEl){cb();return;}
+  const gr=gEl.getBoundingClientRect();
+  const cx=gr.left+gr.width/2-27, cy=gr.top+gr.height/2-41;
+  const src={
+    0:{x:gr.left+gr.width/2-27, y:gr.bottom-130},        // You → bottom
+    1:{x:gr.right-68,            y:gr.top+gr.height/2-41},// Bot 1 → right
+    2:{x:gr.left+gr.width/2-27, y:gr.top+18},             // Bot 2 → top
+    3:{x:gr.left+14,             y:gr.top+gr.height/2-41},// Bot 3 → left
+  }[pid];
+  const fc=document.createElement('div');
+  fc.className=`fly-card ${CC[card.color]}`;
+  fc.innerHTML=`<span class="fly-label">${RD[card.rank]}</span><span class="fly-sym">${card.color}</span>`;
+  // Place at source, no transition, invisible — so no premature movement
+  fc.style.left=src.x+'px';
+  fc.style.top=src.y+'px';
+  fc.style.opacity='0';
+  fc.style.transition='none';
+  document.body.appendChild(fc);
+  // Single reflow, then enable transition and move to center in one step — no overshoot
+  void fc.offsetWidth;
+  fc.style.transition='left 0.34s cubic-bezier(.4,0,.2,1),top 0.34s cubic-bezier(.4,0,.2,1),opacity 0.14s ease';
+  fc.style.opacity='1';
+  fc.style.left=cx+'px';
+  fc.style.top=cy+'px';
+  setTimeout(()=>{
+    fc.style.opacity='0';
+    setTimeout(()=>{fc.remove();cb();},160);
+  },360);
+}
+
+function showShuf(cb){
+  const layer=document.getElementById('anim-layer');
+  if(!layer){cb();return;}
+  layer.innerHTML=`<div id="shuf-ov"><div id="shuf-deck"><div class="sd"></div><div class="sd"></div><div class="sd"></div></div><div id="shuf-lbl">Shuffling…</div></div>`;
+  let pass=0;
+  function doPass(){
+    const cards=layer.querySelectorAll('.sd');
+    cards.forEach((c,i)=>{
+      c.style.animation='none';
+      void c.offsetWidth;
+      c.style.animation=`${i%2===0?'sL':'sR'} 0.42s ease both`;
+    });
+    setTimeout(()=>{
+      cards.forEach(c=>{c.style.animation='';});
+      pass++;
+      if(pass<3) setTimeout(doPass,80);
+      else deal_anim();
+    },440);
+  }
+  function deal_anim(){
+    const lbl=document.getElementById('shuf-lbl');
+    if(lbl)lbl.textContent='Dealing…';
+    // player seating: 0=bottom,1=right,2=top,3=left
+    const dirs=['sdeal-bottom','sdeal-right','sdeal-top','sdeal-left'];
+    const DUR=520, STAGGER=110;
+    let done=0;
+    dirs.forEach((anim,i)=>{
+      const dc=document.createElement('div');
+      dc.className='deal-card';
+      // center the card on the deck (inside anim-layer which fills #game)
+      dc.style.cssText=`left:calc(50% - 20px);top:calc(50% - 30px);animation:${anim} ${DUR}ms ${i*STAGGER}ms cubic-bezier(.4,0,.6,1) both`;
+      layer.appendChild(dc);
+      setTimeout(()=>{
+        done++;
+        if(done===4){layer.innerHTML='';cb();}
+      }, DUR + i*STAGGER + 60);
+    });
+  }
+  setTimeout(doPass,80);
+}
+
+// ════════════════════════════════════
+// TRICK SWEEP + WIN BURST
+// ════════════════════════════════════
+function sweepTrick(winnerPid){
+  const layer=document.getElementById('anim-layer');
+  const gEl=document.getElementById('game');
+  if(!layer||!gEl)return;
+  const gr=gEl.getBoundingClientRect();
+
+  // Winner's target in VIEWPORT coords (sweep-cards use position:fixed)
+  const tgt={
+    0:{x:gr.left+gr.width/2-27,  y:gr.bottom-130},   // bottom (You)
+    1:{x:gr.right-72,             y:gr.top+gr.height/2-41}, // right (Bot 1)
+    2:{x:gr.left+gr.width/2-27,  y:gr.top+18},         // top (Bot 2)
+    3:{x:gr.left+14,              y:gr.top+gr.height/2-41}, // left (Bot 3)
+  }[winnerPid];
+
+  // Win ring — stays in anim-layer (absolute, game-relative)
+  const ring=document.createElement('div');
+  ring.className='win-ring';
+  ring.style.cssText=`left:${tgt.x-gr.left}px;top:${tgt.y-gr.top}px`;
+  layer.appendChild(ring);
+  setTimeout(()=>ring.remove(),700);
+
+  // Sweep each played card: clone at viewport position → fly to winner
+  document.querySelectorAll('.played-slot').forEach(slot=>{
+    const cardEl=slot.querySelector('.card');
+    if(!cardEl)return;
+    const cr2=cardEl.getBoundingClientRect(); // viewport coords
+    const colorClass=['cr','cb','cg','cy'].find(c=>cardEl.classList.contains(c))||'cr';
+
+    const sw=document.createElement('div');
+    sw.className=`sweep-card ${colorClass}`;
+    // Place using fixed positioning at exact card location — no transition yet
+    sw.style.cssText=`position:fixed;left:${cr2.left}px;top:${cr2.top}px;`+
+                     `width:${cr2.width}px;height:${cr2.height}px;opacity:1;transition:none;`;
+    document.body.appendChild(sw);
+
+    void sw.offsetWidth; // force reflow
+
+    // Enable transition then fly toward winner + shrink + fade
+    sw.style.transition='transform 0.45s cubic-bezier(.4,0,.6,1),opacity 0.45s ease';
+    const dx=tgt.x-cr2.left, dy=tgt.y-cr2.top;
+    sw.style.transform=`translate(${dx}px,${dy}px) scale(0.25)`;
+    sw.style.opacity='0';
+    setTimeout(()=>sw.remove(),500);
+  });
+}
+
+// ════════════════════════════════════
+// HAND FIT — dynamically overlap cards so they never clip
+// ════════════════════════════════════
+function adjustHand(){
+  const hand=document.getElementById('my-hand');
+  if(!hand)return;
+  const cards=[...hand.querySelectorAll('.card')];
+  const n=cards.length;
+  if(n<2)return;
+  // measure available width from the tz-btm cell
+  const btm=hand.closest('.tz-btm');
+  const available=(btm?btm.getBoundingClientRect().width:hand.parentElement.getBoundingClientRect().width)-8;
+  const cardW=54;
+  // compute per-card right margin so total width ≤ available
+  // total = n*cardW + (n-1)*mg  → mg = (available - n*cardW)/(n-1)
+  let mg=(n>1)?Math.floor((available-cardW*n)/(n-1)):3;
+  mg=Math.max(-20, Math.min(3, mg));  // clamp: never more than 3px gap, never less than -20px overlap
+  hand.style.gap='0';
+  cards.forEach((c,i)=>{
+    c.style.marginRight=i<n-1?mg+'px':'0';
+  });
+}
+
+window.addEventListener('resize',()=>requestAnimationFrame(adjustHand));
+r();
+</script>
+</body>
+</html>
