@@ -582,42 +582,128 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   .menu-screen{gap:20px;padding:20px 14px}
 }
 
-/* ── Mobile: ≤480px ── */
+/* ── Mobile: ≤480px — full-screen portrait layout ── */
 @media (max-width:480px){
+
+  /* 1. Variables */
   :root{
     --card-w:40px;   --card-h:60px;   --card-fs:13px; --card-cnum:14px; --card-corner:8px;
-    --side-col:54px; --top-row:90px;  --btm-row:152px;
-    --table-sz:162px;--hand-h:66px;   --avatar-sz:36px;
+    --side-col:54px; --top-row:90px;  --btm-row:154px;
+    --table-sz:162px;--hand-h:68px;   --avatar-sz:36px;
     --mini-bw:18px;  --mini-bh:28px;  --mini-bvw:22px;--mini-bvh:16px;
     --gap-hand:2px;
   }
+
+  /* 2. html/body fill viewport, dark background — kills white gap below game */
+  html{height:100%;background:#0e1520}
+  body{height:100%;overflow:hidden;background:#0e1520}
+
+  /* 3. #game: true full-screen dark canvas */
   #game{
-    min-height:100svh;
-    min-height:100dvh;
+    height:100svh;
+    height:100dvh;
+    min-height:unset;
+    background:#0e1520;
     border-radius:0;
-    padding:6px 4px 4px;
+    padding:0;
+    align-items:stretch;
+    justify-content:flex-start;
   }
-  #game::after{display:none} /* hide oval rim on small screens */
+  #game::before{background:none}
+  #game::after{display:none}
+
+  /* 4. #root fills #game as flex child */
+  #root{
+    flex:1;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+    width:100%;
+  }
+
+  /* 5. Menu/lobby screens fill root on dark bg */
+  .menu-screen{
+    flex:1;
+    min-height:0;
+    gap:16px;
+    padding:20px 14px;
+  }
+
+  /* 6. #table-wrap fills root */
+  #table-wrap{
+    flex:1;
+    min-height:0;
+    padding:0;
+  }
+
+  /* 7. Green felt oval — floats in the center grid rows */
+  #table-wrap::before{
+    content:'';
+    position:absolute;
+    top:var(--top-row);
+    bottom:var(--btm-row);
+    left:10px;right:10px;
+    background:radial-gradient(ellipse at 50% 48%,
+      #1f8844 0%,#138036 18%,#0d652a 48%,#094d1e 72%,#063614 100%);
+    border-radius:50%;
+    z-index:0;
+    box-shadow:
+      inset 0 0 60px rgba(0,0,0,.45),
+      0 0 0 3px rgba(255,255,255,.07),
+      0 0 0 6px rgba(0,0,0,.55),
+      0 10px 50px rgba(0,0,0,.85);
+  }
+
+  /* 8. Felt texture on oval only */
+  #table-wrap::after{
+    content:'';
+    position:absolute;
+    top:var(--top-row);
+    bottom:var(--btm-row);
+    left:10px;right:10px;
+    border-radius:50%;
+    background:repeating-linear-gradient(
+      45deg,rgba(255,255,255,.013) 0,rgba(255,255,255,.013) 1px,
+      transparent 1px,transparent 8px);
+    z-index:0;
+    pointer-events:none;
+  }
+
+  /* 9. Grid zones float above the oval */
+  .tz-top2,.tz-left,.tz-mid,.tz-right,.tz-btm{position:relative;z-index:1}
+
+  /* 10. Player & table text */
   .tz-left .player-zone,.tz-right .player-zone{height:110px}
-  .my-info{gap:6px;min-height:48px}
-  .my-name-ring{width:50px;height:50px}
-  .avatar{font-size:11px}
-  .pname{font-size:10px}
+  .pname{color:rgba(255,255,255,.9);font-size:10px}
   .pscore{font-size:9px}
-  .status-bar{font-size:11px;padding:4px 12px}
+  .avatar{font-size:11px}
+
+  /* 11. Bottom strip */
+  .tz-btm{
+    padding-bottom:6px;
+    background:linear-gradient(to top,rgba(0,0,0,.5) 0%,transparent 100%);
+  }
+  .my-info{gap:6px;min-height:46px}
+  .my-name-ring{width:48px;height:48px}
+
+  /* 12. Center mid */
+  .tz-mid{gap:4px}
+  .status-bar{font-size:11px;padding:4px 12px;background:rgba(0,0,0,.55);border-color:rgba(255,255,255,.12)}
   .thought-chip{font-size:9px;padding:3px 8px}
   .lead-chip{font-size:9px;padding:2px 10px}
   .played-name{font-size:8px}
-  .tz-mid{gap:4px}
-  .menu-screen{min-height:auto;gap:16px;padding:16px 12px}
+
+  /* 13. Menus */
   .menu-mark h1,.room-panel h1{font-size:clamp(22px,7vw,30px)}
   .lobby-head h1{font-size:clamp(18px,5vw,24px)}
+  .room-panel{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);padding:18px 14px;gap:10px}
   .chip-btn{font-size:11px;padding:6px 14px;min-height:34px}
-  .room-panel{padding:18px 14px;gap:10px}
   .seat-grid{gap:6px}
   .modal-box{padding:16px}
-  /* Stack bottom buttons horizontally on small screens */
-  .tz-btm > div[style*="gap:8px"]{gap:6px}
+  .modal-bg{border-radius:0}
+
+  /* 14. Shuffle overlay full-screen */
+  #shuffle-overlay{border-radius:0;background:rgba(5,20,10,.92)}
 }
 
 /* ── Very small phones: ≤360px ── */
@@ -644,11 +730,25 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     --mini-bvw:20px; --mini-bvh:14px;
     --gap-hand:2px;
   }
-  #game{min-height:100dvh;border-radius:0}
+  html{height:100%;background:#0e1520}
+  body{height:100%;overflow:hidden;background:#0e1520}
+  #game{height:100dvh;min-height:unset;background:#0e1520;border-radius:0;align-items:stretch;justify-content:flex-start}
+  #game::before{background:none}
   #game::after{display:none}
+  #root{flex:1;min-height:0;display:flex;flex-direction:column;width:100%}
+  #table-wrap{flex:1;min-height:0;padding:0}
+  #table-wrap::before{
+    content:'';position:absolute;
+    top:var(--top-row);bottom:var(--btm-row);left:6px;right:6px;
+    background:radial-gradient(ellipse at 50% 48%,#1f8844 0%,#0d652a 48%,#063614 100%);
+    border-radius:50%;z-index:0;
+    box-shadow:inset 0 0 40px rgba(0,0,0,.45),0 0 0 3px rgba(255,255,255,.07),0 0 0 5px rgba(0,0,0,.5);
+  }
+  .tz-top2,.tz-left,.tz-mid,.tz-right,.tz-btm{position:relative;z-index:1}
   .tz-left .player-zone,.tz-right .player-zone{height:96px}
   .thought-chip{display:none}
-  .menu-screen{gap:10px;padding:10px 12px;min-height:auto}
+  .menu-screen{flex:1;min-height:0;gap:10px;padding:10px 12px}
   .status-bar{font-size:10px;padding:3px 10px}
   .card .csym{display:none}
+  #shuffle-overlay{border-radius:0}
 }
