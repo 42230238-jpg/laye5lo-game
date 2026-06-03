@@ -158,6 +158,118 @@ function roomPayload(roomCode) {
   };
 }
 
+// ── ARBA3MEYE HELPERS ─────────────────────────────────────
+const ARBA_COLORS = ['red','blue','yellow','green'];
+const ARBA_RANKS = ['1','skip','+2','reverse','0','9','8','7','6','5','4','3','2'];
+const ARBA_RV = {'1':13,'skip':12,'+2':11,'reverse':10,'0':9,'9':8,'8':7,'7':6,'6':5,'5':4,'4':3,'3':2,'2':1};
+const ARBA_SCORE = {2:2,3:3,4:4,5:10,6:12,7:14,8:16,9:27};
+const ARBA_WIN = 41;
+
+function buildArbaDeck() {
+  const d = [];
+  for (const color of ARBA_COLORS) for (const rank of ARBA_RANKS) d.push({ id: color + rank, color, rank });
+  return d;
+}
+function dealArbaHands() {
+  const deck = shuffle(buildArbaDeck());
+  const hands = [[],[],[],[]];
+  deck.forEach((c,i)=>hands[i%4].push(c));
+  return hands.map(sortArbaHand);
+}
+function sortArbaHand(h) {
+  return [...h].sort((a,b)=>ARBA_COLORS.indexOf(a.color)-ARBA_COLORS.indexOf(b.color)||ARBA_RV[b.rank]-ARBA_RV[a.rank]);
+}
+function cmpArba(a,b,led) {
+  const ar=a.color==='red', br=b.color==='red';
+  if(ar&&!br)return 1; if(br&&!ar)return -1;
+  if(ar&&br)return ARBA_RV[a.rank]-ARBA_RV[b.rank];
+  const al=a.color===led, bl=b.color===led;
+  if(al&&!bl)return 1; if(bl&&!al)return -1;
+  return ARBA_RV[a.rank]-ARBA_RV[b.rank];
+}
+function legalArba(hand,led,isLead) {
+  if(isLead||!led)return hand;
+  const suited=hand.filter(c=>c.color===led);
+  return suited.length?suited:hand;
+}
+function trickWinArba(trick,led) {
+  let best=0;
+  for(let i=1;i<trick.length;i++) if(cmpArba(trick[i].card,trick[best].card,led)>0) best=i;
+  return trick[best].pid;
+}
+function pointsArba(bid,won) {
+  return (won>=bid?1:-1)*(ARBA_SCORE[bid]||bid);
+}
+function botBidArba(hand) {
+  let est=0;
+  for(const c of hand){
+    if(c.color==='red') est += 0.5 + (ARBA_RV[c.rank]/13)*0.5;
+    else if(ARBA_RV[c.rank]>=12) est+=0.3;
+    else if(ARBA_RV[c.rank]>=10) est+=0.15;
+    else if(ARBA_RV[c.rank]>=8) est+=0.05;
+  }
+  return Math.max(2,Math.min(9,Math.round(est*0.88)));
+}
+function botCardArba(game,pid) {
+  const lg=legalArba(game.hands[pid],game.led,game.trick.length===0);
+  if(game.trick.length===0)return [...lg].sort((a,b)=>cmpArba(b,a,null))[0];
+  const best=game.trick.reduce((w,t)=>cmpArba(t.card,w.card,game.led)>0?t:w,game.trick[0]);
+  const winners=lg.filter(c=>cmpArba(c,best.card,game.led)>0).sort((a,b)=>ARBA_RV[a.rank]-ARBA_RV[b.rank]);
+  return winners[0]||[...lg].sort((a,b)=>ARBA_RV[a.rank]-ARBA_RV[b.rank])[0];
+}
+function newArbaGame(names, scores=[0,0,0,0], round=1) {
+  return { names, phase:'bidding', hands:dealArbaHands(), bids:[null,null,null,null], bidIdx:0, trick:[], led:null, wins:[0,0,0,0], scores, cur:0, round, busy:false, winner:null };
+}
+function broadcastArba(roomCode) {
+  const room=rooms[roomCode];
+  if(!room)return;
+  room.seats.forEach((seat,idx)=>{ if(seat&&seat.id) io.to(seat.id).emit('arbaGameState',{roomCode,gameState:room.arbaGame,mySeatIndex:idx}); });
+}
+function scheduleArba(roomCode) {
+  const room=rooms[roomCode], game=room&&room.arbaGame;
+  if(!room||!game)return;
+  if(game.phase==='bidding'&&room.seats[game.bidIdx]?.type==='bot') {
+    setTimeout(()=>applyArbaBid(roomCode, game.bidIdx, botBidArba(game.hands[game.bidIdx])), 500);
+  } else if(game.phase==='playing'&&room.seats[game.cur]?.type==='bot'&&!game.busy) {
+    setTimeout(()=>playArbaCard(roomCode, game.cur, botCardArba(game,game.cur)?.id), 650);
+  }
+}
+function applyArbaBid(roomCode,pid,bid) {
+  const room=rooms[roomCode], game=room&&room.arbaGame;
+  if(!game||game.phase!=='bidding'||game.bidIdx!==pid)return false;
+  game.bids[pid]=bid; game.bidIdx++;
+  if(game.bidIdx<4){broadcastArba(roomCode); scheduleArba(roomCode); return true;}
+  if(game.bids.reduce((s,x)=>s+x,0)<11){ room.arbaGame=newArbaGame(game.names,game.scores,game.round); broadcastArba(roomCode); scheduleArba(roomCode); return true; }
+  game.phase='playing'; game.cur=0; broadcastArba(roomCode); scheduleArba(roomCode); return true;
+}
+function playArbaCard(roomCode,pid,cardId) {
+  const room=rooms[roomCode], game=room&&room.arbaGame;
+  if(!game||game.phase!=='playing'||game.cur!==pid||game.busy)return false;
+  const card=game.hands[pid].find(c=>c.id===cardId);
+  if(!card)return false;
+  const playable=legalArba(game.hands[pid],game.led,game.trick.length===0);
+  if(!playable.find(c=>c.id===cardId))return false;
+  game.hands[pid]=sortArbaHand(game.hands[pid].filter(c=>c.id!==cardId));
+  if(!game.led)game.led=card.color;
+  game.trick.push({pid,card});
+  if(game.trick.length<4){game.cur=(pid+1)%4; broadcastArba(roomCode); scheduleArba(roomCode); return true;}
+  const wi=trickWinArba(game.trick,game.led);
+  game.wins[wi]++; game.cur=wi; game.busy=true; broadcastArba(roomCode);
+  setTimeout(()=>{
+    const r=rooms[roomCode], g=r&&r.arbaGame; if(!g)return;
+    g.trick=[]; g.led=null; g.busy=false;
+    if(g.hands.every(h=>h.length===0)){
+      for(let i=0;i<4;i++)g.scores[i]+=pointsArba(g.bids[i],g.wins[i]);
+      if(g.scores.some(s=>s>=ARBA_WIN)||g.scores.some(s=>s<=-ARBA_WIN)){
+        const a=g.scores[0]+g.scores[2], b=g.scores[1]+g.scores[3];
+        g.winner=a>b?'Team A':'Team B'; g.phase='gameover';
+      } else g.phase='roundover';
+    }
+    broadcastArba(roomCode); scheduleArba(roomCode);
+  },1500);
+  return true;
+}
+
 io.on("connection", (socket) => {
   console.log("Player connected:", socket.id);
 
@@ -626,6 +738,92 @@ function scheduleBotPlay(roomCode) {
   });
 
   // ── DISCONNECT ────────────────────────────────────────────
+  socket.on("createArbaRoom", () => {
+    const roomCode = makeRoomCode();
+    rooms[roomCode] = { hostId: socket.id, gameType: "arba3meye", seats: [{ id: socket.id, name: "Host", type: "host" }, null, null, null] };
+    socket.join(roomCode);
+    socket.emit("arbaRoomCreated", roomPayload(roomCode));
+  });
+
+  socket.on("joinArbaRoom", ({ roomCode, name }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || room.gameType !== "arba3meye") { socket.emit("arbaJoinError", "Room not found."); return; }
+    const emptyIdx = room.seats.findIndex(s => s === null);
+    if (emptyIdx === -1) { socket.emit("arbaJoinError", "Room is full."); return; }
+    room.seats[emptyIdx] = { id: socket.id, name: name || `Player ${emptyIdx + 1}`, type: "player" };
+    socket.join(roomCode);
+    io.to(roomCode).emit("arbaRoomUpdated", roomPayload(roomCode));
+  });
+
+  socket.on("addArbaBot", ({ roomCode }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || room.gameType !== "arba3meye") { socket.emit("arbaLobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("arbaLobbyError", "Only the host can add bots."); return; }
+    const emptyIdx = room.seats.findIndex(s => s === null);
+    if (emptyIdx === -1) { socket.emit("arbaLobbyError", "Room is full."); return; }
+    room.seats[emptyIdx] = { id: null, name: `Bot ${emptyIdx + 1}`, type: "bot" };
+    io.to(roomCode).emit("arbaRoomUpdated", roomPayload(roomCode));
+  });
+
+  socket.on("removeArbaSeat", ({ roomCode, seatIndex }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || room.gameType !== "arba3meye") { socket.emit("arbaLobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("arbaLobbyError", "Only the host can remove seats."); return; }
+    if (!room.seats[seatIndex] || room.seats[seatIndex].type === "host") { socket.emit("arbaLobbyError", "Cannot remove this seat."); return; }
+    room.seats[seatIndex] = null;
+    io.to(roomCode).emit("arbaRoomUpdated", roomPayload(roomCode));
+  });
+
+  socket.on("moveArbaSeat", ({ roomCode, seatIndex, direction }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || room.gameType !== "arba3meye") { socket.emit("arbaLobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("arbaLobbyError", "Only the host can move seats."); return; }
+    const j = seatIndex + direction;
+    if (j < 0 || j >= 4 || room.seats[seatIndex]?.type === "host" || room.seats[j]?.type === "host") { socket.emit("arbaLobbyError", "Cannot move this seat."); return; }
+    [room.seats[seatIndex], room.seats[j]] = [room.seats[j], room.seats[seatIndex]];
+    io.to(roomCode).emit("arbaRoomUpdated", roomPayload(roomCode));
+  });
+
+  socket.on("startArbaRoom", ({ roomCode }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || room.gameType !== "arba3meye") { socket.emit("arbaLobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("arbaLobbyError", "Only the host can start the game."); return; }
+    if (room.seats.filter(Boolean).length < 4) { socket.emit("arbaLobbyError", "All 4 seats must be filled before starting."); return; }
+    room.arbaGame = newArbaGame(room.seats.map(s => s.name));
+    room.seats.forEach((seat, idx) => { if (seat && seat.id) io.to(seat.id).emit("arbaGameStarted", { roomCode, gameState: room.arbaGame, mySeatIndex: idx }); });
+    scheduleArba(roomCode);
+  });
+
+  socket.on("arbaBid", ({ roomCode, bid }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    const seatIndex = room?.seats.findIndex(s => s && s.id === socket.id);
+    if (seatIndex == null || seatIndex < 0 || !applyArbaBid(roomCode, seatIndex, Number(bid))) socket.emit("arbaLobbyError", "Invalid bid.");
+  });
+
+  socket.on("arbaPlayCard", ({ roomCode, cardId }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    const seatIndex = room?.seats.findIndex(s => s && s.id === socket.id);
+    if (seatIndex == null || seatIndex < 0 || !playArbaCard(roomCode, seatIndex, cardId)) socket.emit("arbaLobbyError", "Invalid card or move.");
+  });
+
+  socket.on("startArbaNextRound", ({ roomCode }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || room.gameType !== "arba3meye" || !room.arbaGame) { socket.emit("arbaLobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("arbaLobbyError", "Only the host can start next round."); return; }
+    const g = room.arbaGame;
+    room.arbaGame = newArbaGame(g.names, [...g.scores], g.round + 1);
+    broadcastArba(roomCode);
+    scheduleArba(roomCode);
+  });
+
   socket.on("disconnect", () => {
     for (const roomCode of Object.keys(rooms)) {
       const room = rooms[roomCode];
@@ -650,7 +848,7 @@ function scheduleBotPlay(roomCode) {
       }
 
       if (changed) {
-        io.to(roomCode).emit("roomUpdated", roomPayload(roomCode));
+        io.to(roomCode).emit(room.gameType === "arba3meye" ? "arbaRoomUpdated" : "roomUpdated", roomPayload(roomCode));
       }
     }
 
