@@ -663,36 +663,36 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
    so the table doesn't look lost in a sea of green. */
 @media (min-height:700px) and (orientation:portrait){
   :root{
-    --card-w:52px;--card-h:79px;
-    --card-fs:17px;--card-num-fs:19px;--card-sym-fs:9px;
-    --hand-h:92px;
-    --hand-overlap:-24px;
-    --table-size:230px;
-    --top-row:108px;--btm-row:198px;
+    --card-w:62px;--card-h:94px;
+    --card-fs:20px;--card-num-fs:22px;--card-sym-fs:10px;
+    --hand-h:110px;
+    --hand-overlap:-36px;
+    --table-size:250px;
+    --top-row:112px;--btm-row:226px;
   }
   .tz-left .player-zone,.tz-right .player-zone{gap:6px}
 }
 @media (min-height:850px) and (orientation:portrait){
   :root{
-    --card-w:54px;--card-h:82px;
-    --card-fs:18px;--card-num-fs:20px;--card-sym-fs:9px;
-    --hand-h:96px;
-    --hand-overlap:-25px;
-    --table-size:240px;
+    --card-w:66px;--card-h:100px;
+    --card-fs:21px;--card-num-fs:24px;--card-sym-fs:10px;
+    --hand-h:116px;
+    --hand-overlap:-39px;
+    --table-size:262px;
     --avatar-sz:44px;
-    --top-row:114px;--btm-row:206px;
+    --top-row:118px;--btm-row:238px;
   }
   .tz-mid{gap:12px}
 }
 
 @media (max-width:360px) and (min-height:700px) and (orientation:portrait){
   :root{
-    --card-w:48px;--card-h:73px;
-    --card-fs:16px;--card-num-fs:17px;--card-sym-fs:8px;
-    --hand-h:86px;
-    --hand-overlap:-23px;
-    --table-size:218px;
-    --top-row:104px;--btm-row:188px;
+    --card-w:56px;--card-h:85px;
+    --card-fs:18px;--card-num-fs:20px;--card-sym-fs:9px;
+    --hand-h:100px;
+    --hand-overlap:-33px;
+    --table-size:232px;
+    --top-row:108px;--btm-row:210px;
   }
 }
 
