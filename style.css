@@ -3,6 +3,7 @@
   --card-w:54px;--card-h:82px;
   --card-fs:18px;--card-num-fs:20px;--card-sym-fs:9px;
   --hand-h:92px;
+  --hand-overlap:0px;
   --table-size:220px;
   --avatar-sz:42px;
   --side-col:72px;--top-row:116px;--btm-row:200px;
@@ -481,6 +482,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   position:relative;
 }
 #my-hand>*{position:relative;}
+#my-hand>*+*{margin-left:var(--hand-overlap)}
 
 /* ── ANIMATIONS ─────────────────────────────────────────── */
 
@@ -659,18 +661,57 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
    On tall phones (> 700 px) the 1fr middle row has plenty of room.
    We let the table size and side-zone player info scale up slightly
    so the table doesn't look lost in a sea of green. */
-@media (min-height:700px) and (orientation:portrait){
+@media (max-width:520px) and (min-height:700px) and (orientation:portrait){
   :root{
-    --table-size:230px;
+    --card-w:60px;--card-h:92px;
+    --card-fs:19px;--card-num-fs:22px;--card-sym-fs:9px;
+    --hand-h:108px;
+    --hand-overlap:-34px;
+    --table-size:236px;
+    --avatar-sz:40px;
+    --side-col:78px;--top-row:120px;--btm-row:206px;
+    --mini-bw:26px;--mini-bh:40px;
+    --mini-vw:34px;--mini-vh:24px;
+  }
+  #table-wrap{gap:2px}
+  .tz-top2{align-items:center}
+  .tz-left,.tz-right{justify-content:center;padding-top:0}
+  .tz-btm{gap:3px;padding-bottom:6px}
+  #my-hand{
+    width:100%;
+    justify-content:center;
+    flex-wrap:nowrap;
+    align-items:flex-end;
+    padding:0 2px;
   }
   .tz-left .player-zone,.tz-right .player-zone{gap:6px}
 }
-@media (min-height:850px) and (orientation:portrait){
+@media (max-width:520px) and (min-height:850px) and (orientation:portrait){
   :root{
-    --table-size:240px;
+    --card-w:64px;--card-h:98px;
+    --card-fs:20px;--card-num-fs:23px;--card-sym-fs:10px;
+    --hand-h:114px;
+    --hand-overlap:-36px;
+    --table-size:252px;
     --avatar-sz:44px;
+    --side-col:82px;--top-row:126px;--btm-row:218px;
+    --mini-bw:28px;--mini-bh:44px;
+    --mini-vw:36px;--mini-vh:26px;
   }
   .tz-mid{gap:12px}
+}
+
+@media (max-width:360px) and (min-height:700px) and (orientation:portrait){
+  :root{
+    --card-w:56px;--card-h:86px;
+    --card-fs:18px;--card-num-fs:20px;--card-sym-fs:8px;
+    --hand-h:102px;
+    --hand-overlap:-32px;
+    --table-size:220px;
+    --side-col:72px;--top-row:114px;--btm-row:196px;
+    --mini-bw:24px;--mini-bh:38px;
+    --mini-vw:32px;--mini-vh:23px;
+  }
 }
 
 /* Landscape / short screens (height ≤ 500 px) */
