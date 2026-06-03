@@ -1,28 +1,47 @@
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%;background:transparent;font-family:'Segoe UI',system-ui,sans-serif}
-h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
-
-/* ── CSS VARIABLES ── */
+/* ── CSS CUSTOM PROPERTIES (responsive base) ───────────── */
 :root{
-  --card-w:54px;   --card-h:82px;   --card-fs:18px; --card-cnum:20px; --card-corner:10px;
-  --card-sm-w:40px;--card-sm-h:60px;--card-sm-fs:15px;
-  --side-col:72px; --top-row:116px; --btm-row:200px;
-  --table-sz:220px;--hand-h:92px;   --avatar-sz:42px;
-  --mini-bw:22px;  --mini-bh:34px;  --mini-bvw:28px;--mini-bvh:20px;
-  --gap-hand:3px;
+  --card-w:54px;--card-h:82px;
+  --card-fs:18px;--card-num-fs:20px;--card-sym-fs:9px;
+  --hand-h:92px;
+  --table-size:220px;
+  --avatar-sz:42px;
+  --side-col:72px;--top-row:116px;--btm-row:200px;
+  --mini-bw:22px;--mini-bh:34px;
+  --mini-vw:28px;--mini-vh:20px;
 }
 
+*{box-sizing:border-box;margin:0;padding:0}
+
+/* Body must have a definite height so #game can fill it */
+html{
+  width:100%;
+  height:100%;
+  height:100dvh;
+}
+body{
+  width:100%;
+  height:100%;
+  background:transparent;
+  font-family:'Segoe UI',system-ui,sans-serif;
+  overflow:hidden; /* prevent page scroll — the game is self-contained */
+}
+h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+/* ── GAME SHELL ──
+   Uses height (not just min-height) so it always fills the viewport exactly.
+   No max-height cap → no white gap below on tall portrait phones. */
 #game{
   width:100%;
-  min-height:620px;
-  background:radial-gradient(ellipse at center, #1a6b3a 0%, #0f4a26 55%, #0a3019 100%);
+  height:100dvh;      /* fill full dynamic viewport height */
+  min-height:480px;   /* hard floor for very small/landscape screens */
+  background:radial-gradient(ellipse at center,#1a6b3a 0%,#0f4a26 55%,#0a3019 100%);
   border-radius:16px;
   position:relative;
   overflow:hidden;
   display:flex;
   flex-direction:column;
-  align-items:center;
-  justify-content:space-between;
+  align-items:stretch;  /* children fill full width */
+  justify-content:flex-start;
   padding:10px 8px 8px;
   box-shadow:inset 0 0 60px rgba(0,0,0,0.5);
   user-select:none;
@@ -43,6 +62,18 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   pointer-events:none;
 }
 
+/* ── ROOT RENDER TARGET ──
+   This is the div that render() writes into.
+   flex:1 + min-height:0 lets it grow to fill #game,
+   which lets #table-wrap (also flex:1) fill it. */
+#root{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  width:100%;
+}
+
 /* ── CARD ── */
 .card{
   position:relative;
@@ -58,20 +89,17 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   transition:transform 0.18s ease,box-shadow 0.18s ease;
   outline:none;
 }
-.card::before{/* inner white border */
+.card::before{
   content:'';position:absolute;inset:2px;border-radius:7px;
   border:1.5px solid rgba(255,255,255,0.28);pointer-events:none;
 }
-.card .cnum{font-size:var(--card-cnum);font-weight:800;line-height:1;color:inherit}
-.card .csym{font-size:9px;opacity:0.75;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.card .cnum{font-size:var(--card-num-fs);font-weight:800;line-height:1;color:inherit}
+.card .csym{font-size:var(--card-sym-fs);opacity:0.75;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
 .card .ptag{position:absolute;top:3px;right:4px;font-size:8px;font-weight:700;
   background:rgba(0,0,0,0.35);border-radius:3px;padding:1px 3px;color:#fff}
-.card .corner{position:absolute;font-size:var(--card-corner);font-weight:800;line-height:1}
+.card .corner{position:absolute;font-size:calc(var(--card-fs)*0.56);font-weight:800;line-height:1}
 .card .corner.tl{top:4px;left:5px}
 .card .corner.br{bottom:4px;right:5px;transform:rotate(180deg)}
-
-/* small variant */
-.card.card-sm{width:var(--card-sm-w);height:var(--card-sm-h);font-size:var(--card-sm-fs)}
 
 /* colors */
 .cr{background:linear-gradient(160deg,#ff4444 0%,#cc1111 100%);color:#fff}
@@ -89,31 +117,33 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   border:1px solid rgba(255,255,255,0.1);
 }
 
-.card.selected{transform:translateY(-18px)!important;box-shadow:0 0 0 3px #ffe066,2px 4px 16px rgba(0,0,0,0.6)!important}
+.card.selected{transform:translateY(calc(var(--card-h)*-0.22))!important;box-shadow:0 0 0 3px #ffe066,2px 4px 16px rgba(0,0,0,0.6)!important}
 .card.unplayable{opacity:0.3;cursor:not-allowed;pointer-events:none}
-.card.playable:hover{transform:translateY(-12px);box-shadow:0 0 0 2px rgba(255,255,255,0.5),2px 6px 16px rgba(0,0,0,0.6)}
+.card.playable:hover{transform:translateY(calc(var(--card-h)*-0.15));box-shadow:0 0 0 2px rgba(255,255,255,0.5),2px 6px 16px rgba(0,0,0,0.6)}
 .card.offsuit{box-shadow:0 0 0 2px #f59e0b,2px 4px 10px rgba(0,0,0,0.55)}
 
 /* ── PLAYER AREAS ── */
 .player-zone{display:flex;flex-direction:column;align-items:center;gap:4px;position:relative}
 .avatar{
-  width:var(--avatar-sz);height:var(--avatar-sz);border-radius:50%;
+  width:var(--avatar-sz);height:var(--avatar-sz);
+  border-radius:50%;
   background:linear-gradient(135deg,#2a5298,#1e3c72);
   border:2.5px solid rgba(255,255,255,0.25);
   display:flex;align-items:center;justify-content:center;
-  font-size:13px;font-weight:700;color:#fff;
+  font-size:clamp(10px,2.5vw,13px);font-weight:700;color:#fff;
   box-shadow:0 2px 8px rgba(0,0,0,0.5);
   flex-shrink:0;
 }
 .avatar.active{border-color:#22ee66;box-shadow:0 0 12px rgba(34,238,102,0.7)}
-.pname{font-size:11px;color:rgba(255,255,255,0.8);font-weight:500;text-shadow:0 1px 3px rgba(0,0,0,0.8)}
-.pscore{font-size:10px;color:rgba(255,220,100,0.9);font-weight:600}
+.pname{font-size:clamp(9px,2.2vw,11px);color:rgba(255,255,255,0.8);font-weight:500;text-shadow:0 1px 3px rgba(0,0,0,0.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pscore{font-size:clamp(9px,2vw,10px);color:rgba(255,220,100,0.9);font-weight:600}
 
 /* opponent rows */
 .opp-row{display:flex;align-items:center;gap:6px;width:100%}
 .opp-cards{display:flex;gap:-4px}
 .mini-back{
-  width:var(--mini-bw);height:var(--mini-bh);border-radius:4px;flex-shrink:0;margin-right:-8px;
+  width:var(--mini-bw);height:var(--mini-bh);
+  border-radius:4px;flex-shrink:0;
   background:linear-gradient(135deg,#1a3a6b,#0e2248);
   border:1px solid rgba(255,255,255,0.15);
   box-shadow:1px 2px 4px rgba(0,0,0,0.5);
@@ -127,20 +157,18 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 /* ── DIAMOND TABLE LAYOUT ── */
 .table-played{
   position:relative;
-  width:var(--table-sz);height:var(--table-sz);
+  width:var(--table-size);height:var(--table-size);
   flex-shrink:0;
 }
-/* empty state */
 .table-played-empty{
   font-size:12px;color:rgba(255,255,255,0.4);
   display:flex;align-items:center;justify-content:center;
-  width:var(--table-sz);height:var(--table-sz);
+  width:var(--table-size);height:var(--table-size);
 }
 .played-slot{
   position:absolute;
   display:flex;flex-direction:column;align-items:center;gap:3px;
 }
-/* slot positions — card is var(--card-w) x var(--card-h), offsets center each card */
 .slot-bottom{ bottom:0;     left:50%; transform:translateX(-50%); }
 .slot-top   { top:0;        left:50%; transform:translateX(-50%); }
 .slot-left  { left:0;       top:50%;  transform:translateY(-50%); }
@@ -151,16 +179,15 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   text-shadow:0 1px 2px rgba(0,0,0,.9);
   white-space:nowrap;order:-1;
 }
-/* name below for bottom slot */
 .slot-bottom .played-name{ order:1; }
 
 .table-card{transition:transform 0.25s;}
 
 .status-bar{
   background:rgba(0,0,0,0.45);border-radius:20px;padding:5px 16px;
-  font-size:12px;color:rgba(255,255,255,0.9);font-weight:500;
+  font-size:clamp(10px,2.5vw,12px);color:rgba(255,255,255,0.9);font-weight:500;
   text-shadow:0 1px 2px rgba(0,0,0,.8);border:1px solid rgba(255,255,255,0.1);
-  min-width:min(200px,80%);max-width:90%;text-align:center;
+  min-width:min(200px,80%);text-align:center;
 }
 .lead-chip{
   background:rgba(0,0,0,0.4);border-radius:12px;padding:3px 12px;
@@ -197,7 +224,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .side-opp.right{right:4px;top:50%;transform:translateY(-50%)}
 .side-cards{display:flex;flex-direction:column;gap:-6px}
 .mini-back-v{
-  width:var(--mini-bvw);height:var(--mini-bvh);border-radius:3px;margin-bottom:-7px;
+  width:var(--mini-vw);height:var(--mini-vh);
+  border-radius:3px;margin-bottom:-7px;
   background:linear-gradient(135deg,#1a3a6b,#0e2248);
   border:1px solid rgba(255,255,255,0.15);
   box-shadow:1px 2px 4px rgba(0,0,0,0.5);
@@ -205,30 +233,33 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 
 /* ── BUTTONS ── */
 .chip-btn{
-  padding:8px 18px;border-radius:20px;
+  padding:6px 18px;border-radius:20px;
   background:linear-gradient(135deg,#2a7d4f,#1a5c38);
   color:#fff;font-size:12px;font-weight:600;
   border:1.5px solid rgba(255,255,255,0.2);
   cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);
   transition:all 0.15s;
-  min-height:36px;
-  -webkit-tap-highlight-color:transparent;
-  touch-action:manipulation;
 }
 .chip-btn:hover{background:linear-gradient(135deg,#33a060,#228040);transform:scale(1.03)}
 .chip-btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
 .chip-btn.gold{background:linear-gradient(135deg,#c89000,#a07000);border-color:rgba(255,220,80,0.4)}
 .chip-btn.gold:hover{background:linear-gradient(135deg,#e0a800,#b88000)}
 
-/* main menu */
+/* ── MENUS ──
+   flex:1 makes every menu screen grow to fill #root, so the green
+   felt extends edge-to-edge on portrait phones. */
 .menu-screen{
-  width:100%;min-height:600px;position:relative;z-index:1;
+  flex:1;
+  width:100%;
+  position:relative;z-index:1;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:28px;padding:28px 18px;text-align:center;
+  min-height:0; /* let flex control height, not a fixed minimum */
+  overflow-y:auto; /* allow scroll if content taller than screen */
 }
 .menu-mark{display:flex;flex-direction:column;align-items:center;gap:8px}
 .menu-mark h1,.room-panel h1{
-  color:#ffe066;font-size:clamp(26px,8vw,38px);font-weight:800;letter-spacing:0;
+  color:#ffe066;font-size:clamp(26px,7vw,38px);font-weight:800;letter-spacing:0;
   text-shadow:0 3px 12px rgba(0,0,0,0.75);
 }
 .menu-mark p,.room-panel p{
@@ -265,10 +296,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 }
 .difficulty-options{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
 .difficulty-btn{
-  height:34px;border-radius:15px;border:1px solid rgba(255,255,255,0.14);
+  height:30px;border-radius:15px;border:1px solid rgba(255,255,255,0.14);
   background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:900;
   text-transform:capitalize;cursor:pointer;
-  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
 }
 .difficulty-btn:hover{background:rgba(255,255,255,0.14)}
 .difficulty-btn.active{
@@ -279,13 +309,12 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   min-height:14px;color:rgba(255,255,255,0.62);font-size:10px;font-weight:700;
 }
 .menu-btn{
-  width:100%;height:44px;border-radius:22px;
+  width:100%;height:42px;border-radius:22px;
   background:linear-gradient(135deg,#2a7d4f,#1a5c38);
   color:#fff;font-size:14px;font-weight:800;
   border:1.5px solid rgba(255,255,255,0.2);
   cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.38);
   transition:transform 0.15s ease,background 0.15s ease,box-shadow 0.15s ease;
-  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
 }
 .menu-btn:hover{
   transform:translateY(-1px);
@@ -299,7 +328,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .menu-btn.primary:hover{background:linear-gradient(135deg,#e0a800,#b88000)}
 .menu-btn.subtle{background:rgba(0,0,0,0.35)}
 .menu-btn:disabled{opacity:0.45;cursor:not-allowed;transform:none}
-.room-screen{gap:0}
+.room-screen{gap:16px}
 .room-panel{
   width:min(320px,92%);display:flex;flex-direction:column;align-items:center;gap:12px;
   background:rgba(0,0,0,0.38);border:1px solid rgba(255,255,255,0.12);
@@ -310,35 +339,35 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .room-code{
   width:190px;padding:10px 12px;border-radius:12px;
   background:rgba(255,224,102,0.13);border:1px solid rgba(255,224,102,0.38);
-  color:#ffe066;font-size:clamp(18px,5vw,24px);font-weight:900;letter-spacing:2px;
-  text-shadow:0 2px 8px rgba(0,0,0,0.65);
+  color:#ffe066;font-size:24px;font-weight:900;letter-spacing:2px;
+  text-shadow:0 2px 8px rgba(0,0,0,0.65);text-align:center;
 }
 .room-input{
   width:190px;padding:10px 12px;border-radius:12px;
   background:rgba(0,0,0,0.28);border:1px solid rgba(255,255,255,0.18);
-  color:#ffe066;font-size:clamp(17px,5vw,22px);font-weight:900;letter-spacing:2px;text-align:center;
+  color:#ffe066;font-size:22px;font-weight:900;letter-spacing:2px;text-align:center;
   outline:none;text-transform:uppercase;box-shadow:inset 0 1px 8px rgba(0,0,0,0.35);
 }
 .room-input:focus{border-color:rgba(255,224,102,0.52);box-shadow:0 0 0 3px rgba(255,224,102,0.12),inset 0 1px 8px rgba(0,0,0,0.35)}
 .room-input::placeholder{color:rgba(255,255,255,0.35)}
 .room-msg{
   min-height:16px;color:rgba(255,255,255,0.72);font-size:11px;font-weight:600;
+  text-align:center;
 }
 .back-arrow{
   position:absolute;top:16px;left:16px;z-index:20;
-  width:44px;height:44px;border-radius:50%;
+  width:40px;height:40px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
   background:rgba(0,0,0,0.42);border:1.5px solid rgba(255,255,255,0.18);
   color:#ffe066;font-size:34px;line-height:1;font-weight:700;
   cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.4);
   transition:transform 0.15s ease,background 0.15s ease;
-  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
 }
 .back-arrow:hover{transform:translateX(-2px);background:rgba(0,0,0,0.58)}
 .lobby-screen{gap:14px;justify-content:center}
 .lobby-head{display:flex;flex-direction:column;align-items:center;gap:4px}
 .lobby-head h1{
-  color:#ffe066;font-size:clamp(20px,6vw,28px);font-weight:800;letter-spacing:0;
+  color:#ffe066;font-size:28px;font-weight:800;letter-spacing:0;
   text-shadow:0 3px 12px rgba(0,0,0,0.75);
 }
 .lobby-head p{
@@ -375,10 +404,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .seat-role{color:rgba(255,255,255,0.58);font-size:10px;font-weight:700;text-transform:uppercase}
 .seat-controls{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 .seat-btn{
-  min-height:32px;border-radius:14px;background:rgba(255,255,255,0.08);
+  min-height:26px;border-radius:14px;background:rgba(255,255,255,0.08);
   border:1px solid rgba(255,255,255,0.14);color:#fff;
   font-size:10px;font-weight:800;cursor:pointer;
-  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
 }
 .seat-btn:hover{background:rgba(255,255,255,0.14)}
 .seat-btn.gold{background:rgba(255,224,102,0.18);border-color:rgba(255,224,102,0.35);color:#ffe066}
@@ -386,8 +414,13 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .seat-btn:disabled{opacity:0.35;cursor:not-allowed}
 
 /* ── MODAL ── */
-.modal-bg{position:absolute;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:50;border-radius:inherit}
-.modal-box{background:linear-gradient(160deg,#1a3a1a,#0e240e);border-radius:14px;padding:22px;width:min(300px,88%);border:1px solid rgba(255,255,255,0.15);box-shadow:0 8px 32px rgba(0,0,0,0.8)}
+.modal-bg{position:absolute;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:50;border-radius:16px}
+.modal-box{
+  background:linear-gradient(160deg,#1a3a1a,#0e240e);border-radius:14px;padding:22px;
+  width:min(300px,calc(100% - 40px));
+  border:1px solid rgba(255,255,255,0.15);box-shadow:0 8px 32px rgba(0,0,0,0.8);
+  max-height:90%;overflow-y:auto;
+}
 .modal-box h3{color:#ffe066;font-size:16px;font-weight:700;margin-bottom:12px;text-align:center}
 .modal-rows{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .modal-row{background:rgba(255,255,255,0.07);border-radius:8px;padding:8px;text-align:center}
@@ -406,30 +439,36 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 /* turn timer ring */
 .timer-ring{--timer-pct:100%;--timer-color:rgb(40,200,40)}
 
-/* ── FIXED TABLE LAYOUT ── */
+/* ── GAME TABLE GRID ──
+   flex:1 + min-height:0 makes it grow to fill #root (which fills #game).
+   Removed the old clamp(…600px) cap that caused the layout to stop halfway. */
 #table-wrap{
   width:100%;
+  flex:1;
+  min-height:0;
   position:relative;
   display:grid;
-  grid-template-rows: var(--top-row) 1fr var(--btm-row);
-  grid-template-columns: var(--side-col) 1fr var(--side-col);
+  grid-template-rows:var(--top-row) 1fr var(--btm-row);
+  grid-template-columns:var(--side-col) 1fr var(--side-col);
   grid-template-areas:
     "top2  top2  top2"
     "left  mid   right"
     "btm   btm   btm";
   gap:4px;
-  min-height:calc(var(--top-row) + 160px + var(--btm-row));
 }
-.tz-top2  {grid-area:top2;display:flex;justify-content:center;align-items:flex-start}
+.tz-top2  {grid-area:top2;display:flex;justify-content:center;align-items:flex-start;overflow:hidden}
 .tz-left  {grid-area:left;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px}
-.tz-mid   {grid-area:mid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:160px}
+.tz-mid   {grid-area:mid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:0}
 .tz-right {grid-area:right;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px}
-/* tz-btm: content anchored to bottom; lifted cards bleed upward via overflow:visible */
 .tz-btm   {grid-area:btm;display:flex;flex-direction:column;align-items:center;
             justify-content:flex-end;gap:4px;overflow:visible;padding-bottom:4px}
-.tz-top2 .player-zone{height:calc(var(--top-row) - 4px)}
-.tz-left .player-zone,.tz-right .player-zone{height:150px}
-/* Fixed height hand — cards lift upward so height never changes */
+
+/* Top opponent zone: sized to fit avatar + name + score + mini-backs */
+.tz-top2 .player-zone{height:calc(var(--top-row) - 4px);overflow:hidden}
+/* Side zones: let them fill their grid cell naturally */
+.tz-left .player-zone,.tz-right .player-zone{width:100%}
+
+/* Fixed height hand — overflow:visible so selected cards lift upward */
 #my-hand{
   height:var(--hand-h);
   overflow:visible;
@@ -437,28 +476,27 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   justify-content:center;
   align-items:flex-end;
   flex-wrap:nowrap;
-  gap:var(--gap-hand);
+  gap:0;
   padding:0;
+  position:relative;
 }
+#my-hand>*{position:relative;}
 
-/* ── ANIMATIONS ────────────────────────────────────────── */
+/* ── ANIMATIONS ─────────────────────────────────────────── */
 
-/* Anim layer sits above everything, pointer-events off so game still works */
 #anim-layer{
   position:absolute;inset:0;z-index:100;
-  pointer-events:none;overflow:hidden;border-radius:inherit;
+  pointer-events:none;overflow:hidden;border-radius:16px;
 }
 
 /* ── SHUFFLE OVERLAY ── */
 #shuffle-overlay{
   position:absolute;inset:0;z-index:200;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  background:rgba(10,48,25,0.88);border-radius:inherit;
+  background:rgba(10,48,25,0.88);border-radius:16px;
   pointer-events:none;
 }
-#shuffle-deck{
-  position:relative;width:60px;height:88px;
-}
+#shuffle-deck{position:relative;width:60px;height:88px;}
 .sdeck-card{
   position:absolute;inset:0;border-radius:9px;
   background:linear-gradient(135deg,#1a3a6b 0%,#0e2248 100%);
@@ -477,19 +515,19 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 }
 @keyframes sdeal-top{
   0%  {transform:translate(0,0) rotate(0deg);opacity:1}
-  100%{transform:translate(0,-200px) rotate(-5deg);opacity:0}
+  100%{transform:translate(0,-220px) rotate(-5deg);opacity:0}
 }
 @keyframes sdeal-right{
   0%  {transform:translate(0,0) rotate(0deg);opacity:1}
-  100%{transform:translate(200px,0) rotate(5deg);opacity:0}
+  100%{transform:translate(220px,0) rotate(5deg);opacity:0}
 }
 @keyframes sdeal-bottom{
   0%  {transform:translate(0,0) rotate(0deg);opacity:1}
-  100%{transform:translate(0,200px) rotate(5deg);opacity:0}
+  100%{transform:translate(0,220px) rotate(5deg);opacity:0}
 }
 @keyframes sdeal-left{
   0%  {transform:translate(0,0) rotate(0deg);opacity:1}
-  100%{transform:translate(-200px,0) rotate(-5deg);opacity:0}
+  100%{transform:translate(-220px,0) rotate(-5deg);opacity:0}
 }
 @keyframes shuffle-left{
   0%  {transform:translate(0,0) rotate(0deg)}
@@ -507,9 +545,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 /* ── CARD-DROP FLYING CARD ── */
 .fly-card{
   position:fixed;
-  width:var(--card-w,54px);height:var(--card-h,82px);
+  width:var(--card-w);height:var(--card-h);
   border-radius:9px;
-  font-weight:700;font-size:var(--card-fs,18px);
+  font-weight:700;font-size:var(--card-fs);
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
   box-shadow:4px 8px 24px rgba(0,0,0,0.7);
@@ -521,8 +559,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 }
 .fly-card.fly-active{opacity:1}
 .fly-card.fly-done{opacity:0;transition:opacity 0.12s ease}
-.fly-card .fly-label{font-size:var(--card-cnum,22px);font-weight:800;line-height:1;color:inherit}
-.fly-card .fly-sym{font-size:9px;opacity:0.75;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.fly-card .fly-label{font-size:var(--card-num-fs);font-weight:800;line-height:1;color:inherit}
+.fly-card .fly-sym{font-size:var(--card-sym-fs);opacity:0.75;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
 .fly-card::before{
   content:'';position:absolute;inset:2px;border-radius:7px;
   border:1.5px solid rgba(255,255,255,0.28);pointer-events:none;
@@ -531,11 +569,11 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 /* ── TRICK SWEEP ── */
 .sweep-card{
   position:fixed;
-  width:var(--card-w,54px);height:var(--card-h,82px);
+  width:var(--card-w);height:var(--card-h);
   border-radius:9px;
   pointer-events:none;z-index:300;
   will-change:transform,opacity;
-  transition:transform 0.45s cubic-bezier(.4,0,.6,1), opacity 0.45s ease;
+  transition:transform 0.45s cubic-bezier(.4,0,.6,1),opacity 0.45s ease;
 }
 .sweep-card.sweep-done{opacity:0;transform:scale(0.5)!important}
 
@@ -548,7 +586,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   box-shadow:2px 4px 12px rgba(0,0,0,0.65);
   pointer-events:none;z-index:300;
   will-change:transform,opacity;
-  transition:transform 0.4s cubic-bezier(.22,.68,.6,1.1), opacity 0.4s ease;
+  transition:transform 0.4s cubic-bezier(.22,.68,.6,1.1),opacity 0.4s ease;
 }
 .deal-card::after{
   content:'';position:absolute;inset:3px;border-radius:4px;
@@ -556,99 +594,99 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 }
 .deal-card.deal-done{opacity:0}
 
-/* ═══════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════
    RESPONSIVE BREAKPOINTS
-   ═══════════════════════════════════════════════════════════ */
+   Width breakpoints handle horizontal fit (cards, columns).
+   Portrait height adjustments are automatic because the grid
+   1fr row just expands — no extra rules needed.
+   ══════════════════════════════════════════════════════════ */
 
-/* ── Touch devices: disable hover transform effects ── */
-@media (hover:none) and (pointer:coarse) {
-  .card.playable:hover{transform:none;box-shadow:2px 4px 10px rgba(0,0,0,0.55)}
-  .card.selected{transform:translateY(-14px)!important}
-  .menu-btn:hover{transform:none;box-shadow:0 4px 14px rgba(0,0,0,0.38)}
-  .chip-btn:hover{transform:none;background:linear-gradient(135deg,#2a7d4f,#1a5c38)}
-  .chip-btn.gold:hover{background:linear-gradient(135deg,#c89000,#a07000)}
-  .back-arrow:hover{transform:none}
+/* Tablet / phablet (≤ 520 px wide) */
+@media (max-width:520px){
+  :root{
+    --card-w:48px;--card-h:73px;
+    --card-fs:16px;--card-num-fs:17px;--card-sym-fs:8px;
+    --hand-h:83px;
+    --table-size:195px;
+    --avatar-sz:38px;
+    --side-col:64px;--top-row:104px;--btm-row:178px;
+    --mini-bw:18px;--mini-bh:28px;
+    --mini-vw:24px;--mini-vh:17px;
+  }
+  #game{border-radius:12px;padding:8px 6px 6px}
 }
 
-/* ── Tablet: ≤767px ── */
-@media (max-width:767px){
+/* Mobile (≤ 420 px wide) */
+@media (max-width:420px){
   :root{
-    --card-w:48px;   --card-h:72px;   --card-fs:16px; --card-cnum:17px;
-    --side-col:64px; --top-row:106px; --btm-row:182px;
-    --table-sz:196px;--hand-h:82px;
-    --mini-bvw:24px; --mini-bvh:17px;
+    --card-w:43px;--card-h:66px;
+    --card-fs:14px;--card-num-fs:15px;--card-sym-fs:7px;
+    --hand-h:76px;
+    --table-size:174px;
+    --avatar-sz:34px;
+    --side-col:60px;--top-row:96px;--btm-row:166px;
+    --mini-bw:16px;--mini-bh:25px;
+    --mini-vw:21px;--mini-vh:15px;
   }
-  .tz-left .player-zone,.tz-right .player-zone{height:130px}
-  .menu-screen{gap:20px;padding:20px 14px}
-}
-
-/* ── Mobile: ≤480px ── */
-@media (max-width:480px){
-  :root{
-    --card-w:40px;   --card-h:60px;   --card-fs:13px; --card-cnum:14px; --card-corner:8px;
-    --side-col:54px; --top-row:90px;  --btm-row:152px;
-    --table-sz:162px;--hand-h:66px;   --avatar-sz:36px;
-    --mini-bw:18px;  --mini-bh:28px;  --mini-bvw:22px;--mini-bvh:16px;
-    --gap-hand:2px;
-  }
-  #game{
-    min-height:100svh;
-    min-height:100dvh;
-    border-radius:0;
-    padding:6px 4px 4px;
-  }
-  #game::after{display:none} /* hide oval rim on small screens */
-  .tz-left .player-zone,.tz-right .player-zone{height:110px}
-  .my-info{gap:6px;min-height:48px}
+  #game{border-radius:0;padding:8px 5px 5px}
+  .my-info{min-height:48px}
   .my-name-ring{width:50px;height:50px}
-  .avatar{font-size:11px}
-  .pname{font-size:10px}
-  .pscore{font-size:9px}
-  .status-bar{font-size:11px;padding:4px 12px}
-  .thought-chip{font-size:9px;padding:3px 8px}
-  .lead-chip{font-size:9px;padding:2px 10px}
-  .played-name{font-size:8px}
-  .tz-mid{gap:4px}
-  .menu-screen{min-height:auto;gap:16px;padding:16px 12px}
-  .menu-mark h1,.room-panel h1{font-size:clamp(22px,7vw,30px)}
-  .lobby-head h1{font-size:clamp(18px,5vw,24px)}
-  .chip-btn{font-size:11px;padding:6px 14px;min-height:34px}
-  .room-panel{padding:18px 14px;gap:10px}
-  .seat-grid{gap:6px}
-  .modal-box{padding:16px}
-  /* Stack bottom buttons horizontally on small screens */
-  .tz-btm > div[style*="gap:8px"]{gap:6px}
+  .back-arrow{width:34px;height:34px;font-size:28px;top:10px;left:10px}
+  .status-bar{padding:4px 10px}
+  .tz-mid{gap:5px}
 }
 
-/* ── Very small phones: ≤360px ── */
+/* Small mobile (≤ 360 px wide) */
 @media (max-width:360px){
   :root{
-    --card-w:35px;   --card-h:52px;   --card-fs:11px; --card-cnum:12px; --card-corner:7px;
-    --side-col:48px; --top-row:82px;  --btm-row:138px;
-    --table-sz:148px;--hand-h:58px;   --avatar-sz:32px;
-    --mini-bw:16px;  --mini-bh:24px;  --mini-bvw:20px;--mini-bvh:14px;
-    --gap-hand:1px;
+    --card-w:38px;--card-h:58px;
+    --card-fs:12px;--card-num-fs:13px;--card-sym-fs:6px;
+    --hand-h:68px;
+    --table-size:154px;
+    --avatar-sz:30px;
+    --side-col:56px;--top-row:88px;--btm-row:154px;
+    --mini-bw:14px;--mini-bh:22px;
+    --mini-vw:18px;--mini-vh:13px;
   }
-  .card .csym{display:none} /* hide color label to save space */
-  .card .ptag{font-size:7px;padding:1px 2px}
-  .status-bar{font-size:10px}
-  .thought-chip{display:none} /* hide AI thinking to save space */
+  .card .ptag{font-size:6px;padding:1px 2px}
+  .card .corner{font-size:calc(var(--card-fs)*0.5)}
+  .tz-mid{gap:4px}
+  .menu-screen{gap:16px;padding:20px 12px}
+  .seat-grid{grid-template-columns:1fr}
 }
 
-/* ── Landscape mobile: short screens ── */
+/* ── PORTRAIT HEIGHT TUNING ──
+   On tall phones (> 700 px) the 1fr middle row has plenty of room.
+   We let the table size and side-zone player info scale up slightly
+   so the table doesn't look lost in a sea of green. */
+@media (min-height:700px) and (orientation:portrait){
+  :root{
+    --table-size:230px;
+  }
+  .tz-left .player-zone,.tz-right .player-zone{gap:6px}
+}
+@media (min-height:850px) and (orientation:portrait){
+  :root{
+    --table-size:240px;
+    --avatar-sz:44px;
+  }
+  .tz-mid{gap:12px}
+}
+
+/* Landscape / short screens (height ≤ 500 px) */
 @media (max-height:500px) and (orientation:landscape){
   :root{
-    --card-w:36px;   --card-h:54px;   --card-fs:12px; --card-cnum:13px; --card-corner:8px;
-    --side-col:50px; --top-row:78px;  --btm-row:136px;
-    --table-sz:144px;--hand-h:60px;   --avatar-sz:32px;
-    --mini-bvw:20px; --mini-bvh:14px;
-    --gap-hand:2px;
+    --card-w:40px;--card-h:61px;
+    --card-fs:14px;--card-num-fs:14px;
+    --hand-h:71px;
+    --table-size:148px;
+    --top-row:76px;--btm-row:144px;
+    --side-col:58px;
+    --avatar-sz:30px;
   }
-  #game{min-height:100dvh;border-radius:0}
-  #game::after{display:none}
-  .tz-left .player-zone,.tz-right .player-zone{height:96px}
-  .thought-chip{display:none}
-  .menu-screen{gap:10px;padding:10px 12px;min-height:auto}
-  .status-bar{font-size:10px;padding:3px 10px}
-  .card .csym{display:none}
+  #game{border-radius:0}
+  .tz-mid{gap:4px}
+  .my-name-ring{width:46px;height:46px}
+  .my-info{min-height:42px}
+  .menu-screen{gap:14px;padding:16px 14px}
 }
