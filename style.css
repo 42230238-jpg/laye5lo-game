@@ -3,7 +3,6 @@
   --card-w:54px;--card-h:82px;
   --card-fs:18px;--card-num-fs:20px;--card-sym-fs:9px;
   --hand-h:92px;
-  --hand-overlap:0px;
   --table-size:220px;
   --avatar-sz:42px;
   --side-col:72px;--top-row:116px;--btm-row:200px;
@@ -511,9 +510,10 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 /* Side zones: let them fill their grid cell naturally */
 .tz-left .player-zone,.tz-right .player-zone{width:100%}
 
-/* Fixed height hand — overflow:visible so selected cards lift upward */
+/* Fixed height hand — cards are direct children; adjustHand() sets marginRight */
 #my-hand{
   height:var(--hand-h);
+  width:100%;
   overflow:visible;
   display:flex;
   justify-content:center;
@@ -521,10 +521,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   flex-wrap:nowrap;
   gap:0;
   padding:0;
-  position:relative;
 }
-#my-hand>*{position:relative;}
-#my-hand>*+*{margin-left:var(--hand-overlap)}
 
 /* ── ANIMATIONS ─────────────────────────────────────────── */
 
@@ -594,12 +591,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   font-weight:700;font-size:var(--card-fs);
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  box-shadow:4px 8px 24px rgba(0,0,0,0.7);
-  pointer-events:none;z-index:300;
+  box-shadow:2px 4px 10px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.35);
+  pointer-events:none;z-index:9999;
   will-change:left,top,opacity;
-  transition:left 0.32s cubic-bezier(.4,0,.2,1),
-             top  0.32s cubic-bezier(.4,0,.2,1),
-             opacity 0.18s ease;
 }
 .fly-card.fly-active{opacity:1}
 .fly-card.fly-done{opacity:0;transition:opacity 0.12s ease}
@@ -608,6 +602,18 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .fly-card::before{
   content:'';position:absolute;inset:2px;border-radius:7px;
   border:1.5px solid rgba(255,255,255,0.28);pointer-events:none;
+}
+
+/* ── WIN BURST (golden ring at winner's spot after sweep) ── */
+@keyframes win-burst{
+  0%  {transform:scale(0.6);opacity:0.9}
+  60% {transform:scale(1.8);opacity:0.55}
+  100%{transform:scale(2.4);opacity:0}
+}
+.win-ring{
+  position:absolute;width:56px;height:56px;border-radius:50%;
+  border:3px solid #ffe066;pointer-events:none;z-index:260;
+  animation:win-burst 0.6s ease-out forwards;
 }
 
 /* ── TRICK SWEEP ── */
@@ -639,137 +645,67 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .deal-card.deal-done{opacity:0}
 
 /* ══════════════════════════════════════════════════════════
-   RESPONSIVE BREAKPOINTS
-   Width breakpoints handle horizontal fit (cards, columns).
-   Portrait height adjustments are automatic because the grid
-   1fr row just expands — no extra rules needed.
+   RESPONSIVE BREAKPOINTS — matches arba3meye exactly
    ══════════════════════════════════════════════════════════ */
 
 /* Tablet / phablet (≤ 520 px wide) */
 @media (max-width:520px){
   :root{
-    --card-w:48px;--card-h:73px;
-    --card-fs:16px;--card-num-fs:17px;--card-sym-fs:8px;
-    --hand-h:83px;
-    --table-size:195px;
-    --avatar-sz:38px;
-    --side-col:64px;--top-row:104px;--btm-row:178px;
+    --card-w:50px;--card-h:76px;
+    --card-fs:16px;--card-num-fs:18px;--card-sym-fs:7px;
+    --hand-h:84px;
+    --table-size:184px;
+    --avatar-sz:36px;
+    --side-col:44px;--top-row:96px;--btm-row:180px;
     --mini-bw:18px;--mini-bh:28px;
-    --mini-vw:24px;--mini-vh:17px;
+    --mini-vw:20px;--mini-vh:14px;
   }
-  #game{border-radius:12px;padding:8px 6px 6px}
+  #game{border-radius:0;min-height:0;padding:0}
+  #game::after{top:6px;left:6px;right:6px;bottom:6px}
+  #my-hand{justify-content:flex-start;padding:0 2px;width:100%}
+  .sweep-card{width:var(--card-w);height:var(--card-h)}
 }
 
-/* Mobile (≤ 420 px wide) */
-@media (max-width:420px){
+/* Small phones (≤ 380 px wide) — same threshold as arba3meye */
+@media (max-width:380px){
   :root{
-    --card-w:43px;--card-h:66px;
-    --card-fs:14px;--card-num-fs:15px;--card-sym-fs:7px;
-    --hand-h:76px;
-    --table-size:174px;
-    --avatar-sz:34px;
-    --side-col:60px;--top-row:96px;--btm-row:166px;
-    --mini-bw:16px;--mini-bh:25px;
-    --mini-vw:21px;--mini-vh:15px;
-  }
-  #game{border-radius:0;padding:8px 5px 5px}
-  .my-info{min-height:48px}
-  .my-name-ring{width:50px;height:50px}
-  .back-arrow{width:34px;height:34px;font-size:28px;top:10px;left:10px}
-  .status-bar{padding:4px 10px}
-  .tz-mid{gap:5px}
-}
-
-/* Small mobile (≤ 360 px wide) */
-@media (max-width:360px){
-  :root{
-    --card-w:38px;--card-h:58px;
-    --card-fs:12px;--card-num-fs:13px;--card-sym-fs:6px;
-    --hand-h:68px;
-    --table-size:154px;
-    --avatar-sz:30px;
-    --side-col:56px;--top-row:88px;--btm-row:154px;
-    --mini-bw:14px;--mini-bh:22px;
+    --card-w:46px;--card-h:70px;
+    --card-fs:15px;--card-num-fs:17px;--card-sym-fs:7px;
+    --hand-h:78px;
+    --table-size:170px;
+    --avatar-sz:32px;
+    --side-col:40px;--top-row:88px;--btm-row:168px;
+    --mini-bw:15px;--mini-bh:24px;
     --mini-vw:18px;--mini-vh:13px;
   }
-  .card .ptag{font-size:6px;padding:1px 2px}
-  .card .corner{font-size:calc(var(--card-fs)*0.5)}
-  .tz-mid{gap:4px}
-  .menu-screen{gap:16px;padding:20px 12px}
+  .my-info{min-height:46px}
+  .my-name-ring{width:46px;height:46px}
+  .status-bar{padding:4px 10px}
+  .tz-mid{gap:5px}
   .seat-grid{grid-template-columns:1fr}
 }
 
-/* ── PORTRAIT HEIGHT TUNING ──
-   On tall phones (> 700 px) the 1fr middle row has plenty of room.
-   We let the table size and side-zone player info scale up slightly
-   so the table doesn't look lost in a sea of green. */
-@media (max-width:520px) and (min-height:700px) and (orientation:portrait){
-  :root{
-    --card-w:60px;--card-h:92px;
-    --card-fs:19px;--card-num-fs:22px;--card-sym-fs:9px;
-    --hand-h:108px;
-    --hand-overlap:-34px;
-    --table-size:236px;
-    --avatar-sz:40px;
-    --side-col:78px;--top-row:120px;--btm-row:206px;
-    --mini-bw:26px;--mini-bh:40px;
-    --mini-vw:34px;--mini-vh:24px;
-  }
-  #table-wrap{gap:2px}
-  .tz-top2{align-items:center}
-  .tz-left,.tz-right{justify-content:center;padding-top:0}
-  .tz-btm{gap:3px;padding-bottom:6px}
-  #my-hand{
-    width:100%;
-    justify-content:center;
-    flex-wrap:nowrap;
-    align-items:flex-end;
-    padding:0 2px;
-  }
-  .tz-left .player-zone,.tz-right .player-zone{gap:6px}
-}
-@media (max-width:520px) and (min-height:850px) and (orientation:portrait){
-  :root{
-    --card-w:64px;--card-h:98px;
-    --card-fs:20px;--card-num-fs:23px;--card-sym-fs:10px;
-    --hand-h:114px;
-    --hand-overlap:-36px;
-    --table-size:252px;
-    --avatar-sz:44px;
-    --side-col:82px;--top-row:126px;--btm-row:218px;
-    --mini-bw:28px;--mini-bh:44px;
-    --mini-vw:36px;--mini-vh:26px;
-  }
-  .tz-mid{gap:12px}
-}
-
-@media (max-width:360px) and (min-height:700px) and (orientation:portrait){
-  :root{
-    --card-w:56px;--card-h:86px;
-    --card-fs:18px;--card-num-fs:20px;--card-sym-fs:8px;
-    --hand-h:102px;
-    --hand-overlap:-32px;
-    --table-size:220px;
-    --side-col:72px;--top-row:114px;--btm-row:196px;
-    --mini-bw:24px;--mini-bh:38px;
-    --mini-vw:32px;--mini-vh:23px;
-  }
-}
-
-/* Landscape / short screens (height ≤ 500 px) */
+/* Landscape / short screens (height ≤ 500 px) — matches arba3meye */
 @media (max-height:500px) and (orientation:landscape){
   :root{
     --card-w:40px;--card-h:61px;
-    --card-fs:14px;--card-num-fs:14px;
+    --card-fs:14px;--card-num-fs:15px;--card-sym-fs:6px;
     --hand-h:71px;
     --table-size:148px;
-    --top-row:76px;--btm-row:144px;
-    --side-col:58px;
     --avatar-sz:30px;
+    --side-col:52px;--top-row:62px;--btm-row:116px;
+    --mini-bw:14px;--mini-bh:22px;
+    --mini-vw:18px;--mini-vh:12px;
   }
-  #game{border-radius:0}
-  .tz-mid{gap:4px}
-  .my-name-ring{width:46px;height:46px}
-  .my-info{min-height:42px}
+  #game{border-radius:0;min-height:0;padding:0}
+  #my-hand{justify-content:flex-start;padding:0 3px}
+  .tz-left,.tz-right{justify-content:center;padding-top:0}
+  .tz-mid{gap:3px;min-height:0}
+  .tz-btm{gap:2px;padding-bottom:3px}
+  .status-bar{font-size:10px;min-width:145px;padding:3px 10px}
   .menu-screen{gap:14px;padding:16px 14px}
+  .menu-btn{height:34px;font-size:12px}
+  .sweep-card{width:var(--card-w);height:var(--card-h)}
+  .thought-chip{display:none}
+  .modal-bg{border-radius:0}
 }

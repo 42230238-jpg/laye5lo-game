@@ -170,32 +170,31 @@ const ANIM = (() => {
   // Animates a card flying from `fromRect` center → `toRect` center.
   // card = {color, type}. onDone called after animation.
 
-  // Read current card half-dimensions from CSS variables (responsive-aware)
-  function cardHalf(){
-    const cs=getComputedStyle(document.documentElement);
-    const w=parseFloat(cs.getPropertyValue('--card-w'))||54;
-    const h=parseFloat(cs.getPropertyValue('--card-h'))||82;
-    return{hw:w/2,hh:h/2};
-  }
-
   function flyCard(card, fromX, fromY, toX, toY, onDone){
     const lbl=cardLabel(card);
     const cc=colorClass(card.color);
-    const{hw,hh}=cardHalf();
     const el=document.createElement('div');
     el.className=`fly-card ${cc}`;
-    // Place at start — no transform, just left/top so transition is a clean straight line
-    el.style.cssText=`left:${fromX-hw}px;top:${fromY-hh}px;opacity:0;`;
-    el.innerHTML=`<div class="fly-label">${lbl}</div><div class="fly-sym">${card.color}</div>`;
+    el.innerHTML=`<span class="fly-label">${lbl}</span><span class="fly-sym">${card.color}</span>`;
+    // Place at source, no transition yet, invisible
+    el.style.left=fromX+'px';
+    el.style.top=fromY+'px';
+    el.style.opacity='0';
+    el.style.transition='none';
     document.body.appendChild(el);
-
-    // Two rAF frames: first paints start position, second triggers transition
+    // Read ACTUAL rendered size (respects CSS variables at current breakpoint)
+    const fr=el.getBoundingClientRect();
+    const hw=(fr.width||54)/2;
+    const hh=(fr.height||82)/2;
+    el.style.left=(fromX-hw)+'px';
+    el.style.top=(fromY-hh)+'px';
+    // Double rAF: enable transition then fly to destination in one clean step
     requestAnimationFrame(()=>{
       requestAnimationFrame(()=>{
+        el.style.transition='left 0.32s cubic-bezier(.4,0,.2,1),top 0.32s cubic-bezier(.4,0,.2,1),opacity 0.18s ease';
         el.style.opacity='1';
-        el.style.left=`${toX-hw}px`;
-        el.style.top=`${toY-hh}px`;
-        // onDone fires when card reaches destination (matches transition duration)
+        el.style.left=(toX-hw)+'px';
+        el.style.top=(toY-hh)+'px';
         setTimeout(()=>{
           if(onDone) onDone();
           el.style.opacity='0';
@@ -210,33 +209,49 @@ const ANIM = (() => {
   // slots = array of {card, el: DOMRect of the played slot}
   // winnerRect = DOMRect of winner avatar
   function sweepTrick(slotRects, winnerX, winnerY, onDone){
-    const{hw,hh}=cardHalf();
-    const els=[];
-    slotRects.forEach(({card,x,y})=>{
-      const lbl=cardLabel(card);
-      const cc=colorClass(card.color);
-      const el=document.createElement('div');
-      el.className=`sweep-card ${cc}`;
-      el.style.cssText=`left:${x-hw}px;top:${y-hh}px;font-size:14px;font-weight:700;color:inherit;display:flex;align-items:center;justify-content:center;`;
-      el.textContent=lbl;
-      document.body.appendChild(el);
-      els.push(el);
+    const animLayer=layer();
+    const gEl=document.getElementById('game');
+    const gr=gEl?gEl.getBoundingClientRect():{left:0,top:0};
+
+    // Win burst ring at winner's avatar position (game-relative coords)
+    const ring=document.createElement('div');
+    ring.className='win-ring';
+    ring.style.cssText=`left:${winnerX-gr.left-28}px;top:${winnerY-gr.top-28}px`;
+    animLayer.appendChild(ring);
+    setTimeout(()=>ring.remove(),700);
+
+    // Sweep each card: read live positions or use pre-computed rects
+    const liveSlots=document.querySelectorAll('.played-slot');
+    const sources=liveSlots.length>0
+      ? [...liveSlots].map(slot=>{
+          const cardEl2=slot.querySelector('.card');
+          if(!cardEl2)return null;
+          const cr2=cardEl2.getBoundingClientRect();
+          const colorCls=['cr','cb','cg','cy'].find(c=>cardEl2.classList.contains(c))||'cr';
+          return{left:cr2.left,top:cr2.top,width:cr2.width,height:cr2.height,colorCls};
+        }).filter(Boolean)
+      : slotRects.map(({card,x,y})=>{
+          const fr=document.querySelector('.fly-card');
+          const w=(fr?fr.getBoundingClientRect().width:null)||54;
+          const h=(fr?fr.getBoundingClientRect().height:null)||82;
+          return{left:x-w/2,top:y-h/2,width:w,height:h,colorCls:colorClass(card.color)};
+        });
+
+    sources.forEach(({left,top,width,height,colorCls})=>{
+      const sw=document.createElement('div');
+      sw.className=`sweep-card ${colorCls}`;
+      sw.style.cssText=`position:fixed;left:${left}px;top:${top}px;`+
+                       `width:${width}px;height:${height}px;opacity:1;transition:none;border-radius:9px;`;
+      document.body.appendChild(sw);
+      void sw.offsetWidth; // force reflow before enabling transition
+      sw.style.transition='transform 0.45s cubic-bezier(.4,0,.6,1),opacity 0.45s ease';
+      const dx=winnerX-left, dy=winnerY-top;
+      sw.style.transform=`translate(${dx}px,${dy}px) scale(0.25)`;
+      sw.style.opacity='0';
+      setTimeout(()=>sw.remove(),500);
     });
 
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{
-        els.forEach(el=>{
-          const cx=parseFloat(el.style.left)+hw;
-          const cy=parseFloat(el.style.top)+hh;
-          el.style.transform=`translate(${winnerX-cx}px,${winnerY-cy}px) scale(0.3)`;
-          el.style.opacity='0';
-        });
-        setTimeout(()=>{
-          els.forEach(e=>e.remove());
-          if(onDone)onDone();
-        },480);
-      });
-    });
+    setTimeout(()=>{if(onDone)onDone();},480);
   }
 
   // ── PUBLIC INTERFACE ─────────────────────────────────────
@@ -1002,6 +1017,7 @@ function render(){
   document.getElementById('root').innerHTML=buildHTML();
   attachEvents();
   updateTimerBar();
+  requestAnimationFrame(adjustHand);
 }
 
 function buildHTML(){
@@ -1046,18 +1062,13 @@ function buildHTML(){
     tableCards=Object.values(slots).join('');
   }
 
-  // MY HAND — fan slightly
+  // MY HAND — cards rendered directly (no rotation wrappers), adjustHand handles overlap
   const myHand=G.hands[mySeatIndex];
-  const n=myHand.length;
-  const handHTML=myHand.map((c,i)=>{
-    const offset=n>1?(i/(n-1)-0.5)*Math.min(n*2,24):0;
-    const yOff=Math.abs(offset)*0.3;
+  const handHTML=myHand.map((c)=>{
     const sel=selIds.has(c.id);
     const play=playableIds.has(c.id);
     const gifted=giftedIds.has(c.id);
-    return `<div style="transform:rotate(${offset}deg) translateY(${yOff}px);transform-origin:bottom center;display:inline-block">
-      ${cardEl(c,{selectable:isMyTurn,playable:play,selected:sel,gifted})}
-    </div>`;
+    return cardEl(c,{selectable:isMyTurn,playable:play,selected:sel,gifted});
   }).join('');
 
   // AVATAR ACTIVE STATE
@@ -1182,23 +1193,18 @@ function buildGiftHTML(){
   const hand=G.hands[mySeatIndex];
   const canSelectGift = !G.giftSubmitted;  // lock hand after submitting online
   const violation=G.selected.length>0&&giftViolatesColor(hand,G.selected);
-  const n=hand.length;
-  const handHTML=hand.map((c,i)=>{
-    const offset=n>1?(i/(n-1)-0.5)*Math.min(n*2,24):0;
-    const yOff=Math.abs(offset)*0.3;
+  const handHTML=hand.map((c)=>{
     const sel=selSet.has(c.id);
     const p=pts(c);
     const ptag=p>0?`<span class="ptag">${p}</span>`:'';
     const cc=COLOR_CLASS[c.color];
-    return `<div style="transform:rotate(${offset}deg) translateY(${yOff}px);transform-origin:bottom center;display:inline-block">
-      <div class="card ${cc}${sel?' selected':''}" ${canSelectGift?`data-gift="${c.id}" style="cursor:pointer"`:'style="opacity:0.6"'}>
+    return `<div class="card ${cc}${sel?' selected':''}" ${canSelectGift?`data-gift="${c.id}" style="cursor:pointer"`:'style="opacity:0.6"'}>
         ${ptag}
         <span class="corner tl">${lbl(c)}</span>
         <div class="cnum">${lbl(c)}</div>
         <div class="csym">${c.color}</div>
         <span class="corner br">${lbl(c)}</span>
-      </div>
-    </div>`;
+      </div>`;
   }).join('');
 
   // Gift goes to the player to my right (seat+1)
@@ -1514,8 +1520,16 @@ function buildJoinRoomHTML(){
 <div class="menu-screen room-screen">
   <div class="room-panel">
     <h1>Join Room</h1>
-    <p>Enter the room code someone shared with you.</p>
-    <input class="room-input" id="join-room-code" maxlength="7" placeholder="ABC-123" value="${G.joinCode||''}">
+    <p>Enter your name and the room code.</p>
+    <input class="room-input" id="join-player-name" maxlength="14"
+      placeholder="Your name"
+      value="${G.joinName||''}"
+      oninput="G.joinName=this.value"
+      style="text-transform:none;font-size:16px;letter-spacing:0">
+    <input class="room-input" id="join-room-code" maxlength="7"
+      placeholder="ABC-123"
+      value="${G.joinCode||''}"
+      oninput="G.joinCode=this.value.toUpperCase();this.value=G.joinCode">
     ${G.roomMsg?`<div class="room-msg">${G.roomMsg}</div>`:''}
     <div class="room-actions">
       <button class="menu-btn primary" onclick="joinCustomRoom()">Join Room</button>
@@ -1607,7 +1621,7 @@ window.openArba3meye=function(){stopTimer();window.location.href='arba3meye.html
 window.backToGameSelect=function(){initMenu();};
 window.openQuickSetup=function(){stopTimer();G={phase:'quickSetup',modal:null};render();};
 window.quickPlay=function(){initGame();};
-window.openCustomRoom=function(){stopTimer();G={phase:'customRoom',modal:null,roomMode:'choice',roomCode:null,joinCode:'',roomMsg:''};render();};
+window.openCustomRoom=function(){stopTimer();G={phase:'customRoom',modal:null,roomMode:'choice',roomCode:null,joinCode:'',joinName:G.joinName||'',roomMsg:''};render();};
 window.showCreateRoom=function(){G.roomMode='create';G.roomCode=makeRoomCode();G.roomMsg='';render();};
 window.showJoinRoom=function(){G.roomMode='join';G.joinCode='';G.roomMsg='';render();};
 window.enterRoomLobby=function(){
@@ -1615,10 +1629,13 @@ window.enterRoomLobby=function(){
   render();
 };
 window.joinCustomRoom=function(){
-  const input=document.getElementById('join-room-code');
-  const raw=(input&&input.value?input.value:G.joinCode||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const nameEl=document.getElementById('join-player-name');
+  const codeEl=document.getElementById('join-room-code');
+  const name=((nameEl?nameEl.value:G.joinName)||'').trim()||'Player';
+  const raw=((codeEl?codeEl.value:G.joinCode)||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!name||name==='Player'&&!nameEl){G.roomMsg='Enter your name.';render();return;}
   if(raw.length<6){G.roomMsg='Enter a 6-character room code.';render();return;}
-  const name=prompt('Your name:')||'Player';
+  G.joinName=name;
   G.roomMsg='Joining…';render();
   socket.emit('joinRoom',{roomCode:raw,name});
 };
@@ -1704,15 +1721,43 @@ function newRound(){
   ANIM.shuffleAndDeal(()=>{ G.phase='gift'; render(); });
 }
 
+
+// ── HAND OVERLAP ─────────────────────────────────────────
+// Dynamically computes card margin so the hand always fits the
+// available width — matches arba3meye's approach exactly.
+function adjustHand(){
+  const hand=document.getElementById('my-hand');
+  if(!hand)return;
+  const cards=[...hand.querySelectorAll('.card')];
+  const n=cards.length;
+  if(n<2)return;
+  // measure actual visible width so the last card never clips off the right edge
+  const available=hand.getBoundingClientRect().width-8;
+  const cardW=cards[0].getBoundingClientRect().width||54;
+  // total = n*cardW + (n-1)*mg → mg = (available - n*cardW)/(n-1)
+  let mg=(n>1)?Math.floor((available-cardW*n)/(n-1)):3;
+  mg=Math.min(3,mg);
+  if(window.matchMedia('(max-width:520px)').matches){
+    mg=Math.min(mg,-1);
+  } else {
+    mg=Math.max(cardW*-0.62,mg);
+  }
+  hand.style.gap='0';
+  cards.forEach((c,i)=>{
+    c.style.marginRight=i<n-1?mg+'px':'0';
+  });
+}
+window.addEventListener('resize',()=>requestAnimationFrame(adjustHand));
+
 initMenu();
 window.createOnlineRoom = function () {
   socket.emit("createRoom");
 };
 
 window.joinOnlineRoom = function () {
-  // Navigate to the join-room input screen
   G.roomMode = 'join';
   G.joinCode = '';
+  G.joinName = G.joinName || '';
   G.roomMsg = '';
   render();
 };
