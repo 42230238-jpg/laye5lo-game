@@ -76,6 +76,7 @@ const ANIM = (() => {
     return {red:'cr',blue:'cb',green:'cg',yellow:'cy'}[color]||'cb';
   }
   function cardLabel(card){
+    if(useDecStyle) return DECK_RANK[card.type]!==undefined?DECK_RANK[card.type]:card.type;
     if(card.type==='draw2')return '+2';
     if(card.type==='skip')return '⊘';
     if(card.type==='reverse')return '↺';
@@ -172,10 +173,11 @@ const ANIM = (() => {
 
   function flyCard(card, fromX, fromY, toX, toY, onDone){
     const lbl=cardLabel(card);
+    const sym=useDecStyle?(DECK_SUIT[card.color]||card.color):card.color;
     const cc=colorClass(card.color);
     const el=document.createElement('div');
-    el.className=`fly-card ${cc}`;
-    el.innerHTML=`<span class="fly-label">${lbl}</span><span class="fly-sym">${card.color}</span>`;
+    el.className=`fly-card ${cc}${useDecStyle?' deck-mode':''}`;
+    el.innerHTML=`<span class="fly-label">${lbl}</span><span class="fly-sym">${sym}</span>`;
     // Place at source, no transition yet, invisible
     el.style.left=fromX+'px';
     el.style.top=fromY+'px';
@@ -518,6 +520,41 @@ const STRENGTH={'1':13,'skip':12,'draw2':11,'reverse':10,'0':9,'9':8,'8':7,'7':6
 const COLOR_CLASS={red:'cr',blue:'cb',green:'cg',yellow:'cy'};
 const AVATARS=['Y','B1','B2','B3'];
 const DEFAULT_NAMES=['You','Bot 1','Bot 2','Bot 3'];
+
+// ── DECK-STYLE CARD PREFERENCE ────────────────────────────────
+// Pure client-side visual toggle — each player picks independently.
+// Stored in localStorage, never sent to the server.
+// UNO mode  : colored cards with UNO labels  (+2, ⊘, ↺, 0-9)
+// Deck mode : same colored cards, standard-deck labels
+//   red   → ♥  Hearts     yellow → ♦  Diamonds
+//   green → ♣  Clubs      blue   → ♠  Spades
+//   1→A  0→10  draw2→Q  reverse→J  skip→K  (2-9 unchanged)
+let useDecStyle=false;
+try{useDecStyle=localStorage.getItem('leeCardStyle')==='deck';}catch(e){}
+
+const DECK_RANK={'0':'10','1':'A','draw2':'Q','reverse':'J','skip':'K'};
+const DECK_SUIT={red:'♥',yellow:'♦',green:'♣',blue:'♠'};
+
+window.toggleDeckStyle=function(){
+  useDecStyle=!useDecStyle;
+  try{localStorage.setItem('leeCardStyle',useDecStyle?'deck':'uno');}catch(e){}
+  render();
+};
+
+// Returns the visible rank label for a card (respects current style preference)
+function displayLbl(c){
+  if(!useDecStyle)return lbl(c);
+  return DECK_RANK[c.type]!==undefined?DECK_RANK[c.type]:c.type;
+}
+// Returns the visible suit/color symbol for a card
+function displaySym(c){
+  return useDecStyle?(DECK_SUIT[c.color]||c.color):c.color;
+}
+// Corner content: in deck mode stacks rank + suit on two lines
+function cornerContent(rankLabel,suitSym){
+  if(!useDecStyle)return rankLabel;
+  return `${rankLabel}<span class="dk-s">${suitSym}</span>`;
+}
 
 function buildDeck(){
   const d=[];
@@ -991,19 +1028,20 @@ function aiPlay(){
 function cardEl(card,opts={}){
   const{selectable=false,playable=true,selected=false,rot=0,offsuit=false,small=false,gifted=false}=opts;
   const p=pts(card),ptag=p>0?`<span class="ptag">${p}</span>`:'';
-  const l=lbl(card);
+  const l=displayLbl(card);
+  const sym=displaySym(card);
+  const corner=cornerContent(l,sym);
   const cc=COLOR_CLASS[card.color];
-  // Use CSS classes for sizing — dimensions driven by CSS variables (responsive)
-  const cls=['card',cc,small?'card-sm':'',selected?'selected':'',selectable&&playable?'playable':'',selectable&&!playable?'unplayable':'',offsuit?'offsuit':'',gifted?'gifted':''].filter(Boolean).join(' ');
+  const cls=['card',cc,small?'card-sm':'',useDecStyle?'deck-mode':'',selected?'selected':'',selectable&&playable?'playable':'',selectable&&!playable?'unplayable':'',offsuit?'offsuit':'',gifted?'gifted':''].filter(Boolean).join(' ');
   const style=rot?`transform:rotate(${rot}deg)`:'';
   return `<div class="${cls}"${style?` style="${style}"`:''}
     ${selectable?`data-play="${card.id}"`:''}
     >
     ${ptag}
-    <span class="corner tl">${l}</span>
+    <span class="corner tl">${corner}</span>
     <div class="cnum">${l}</div>
-    <div class="csym">${card.color}</div>
-    <span class="corner br">${l}</span>
+    <div class="csym">${sym}</div>
+    <span class="corner br">${corner}</span>
   </div>`;
 }
 
@@ -1154,8 +1192,9 @@ function buildHTML(){
       </div>
     </div>
     <div id="my-hand">${handHTML}</div>
-    <div style="display:flex;gap:8px;margin-top:4px">
+    <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;justify-content:center">
       <button class="chip-btn" onclick="showRules()">Rules</button>
+      <button class="chip-btn${useDecStyle?' gold':''}" onclick="toggleDeckStyle()" title="Toggle card style: UNO ↔ Playing cards">${useDecStyle?'♠ Deck':'🎴 UNO'}</button>
       ${!isOnline?`<button class="chip-btn gold" onclick="createOnlineRoom()">Create Room</button>
 <button class="chip-btn" onclick="joinOnlineRoom()">Join Room</button>`:''}
     </div>
@@ -1197,13 +1236,17 @@ function buildGiftHTML(){
     const sel=selSet.has(c.id);
     const p=pts(c);
     const ptag=p>0?`<span class="ptag">${p}</span>`:'';
+    const l=displayLbl(c);
+    const sym=displaySym(c);
+    const corner=cornerContent(l,sym);
     const cc=COLOR_CLASS[c.color];
-    return `<div class="card ${cc}${sel?' selected':''}" ${canSelectGift?`data-gift="${c.id}" style="cursor:pointer"`:'style="opacity:0.6"'}>
+    const deckCls=useDecStyle?' deck-mode':'';
+    return `<div class="card ${cc}${deckCls}${sel?' selected':''}" ${canSelectGift?`data-gift="${c.id}" style="cursor:pointer"`:'style="opacity:0.6"'}>
         ${ptag}
-        <span class="corner tl">${lbl(c)}</span>
-        <div class="cnum">${lbl(c)}</div>
-        <div class="csym">${c.color}</div>
-        <span class="corner br">${lbl(c)}</span>
+        <span class="corner tl">${corner}</span>
+        <div class="cnum">${l}</div>
+        <div class="csym">${sym}</div>
+        <span class="corner br">${corner}</span>
       </div>`;
   }).join('');
 
@@ -1265,12 +1308,13 @@ function buildGiftHTML(){
       <span class="pscore">${G.scores[meSeat]}pts</span>
     </div>
     <div id="my-hand">${handHTML}</div>
-    ${G.giftSubmitted
-      ? `<div class="room-msg" style="margin-top:6px">Waiting for other players to gift…</div>`
-      : `<button class="chip-btn gold" onclick="confirmGift()" ${G.selected.length!==3||violation?'disabled':''}>
-           Gift selected ->
-         </button>`
-    }
+    <div style="display:flex;gap:8px;margin-top:4px;justify-content:center;align-items:center;flex-wrap:wrap">
+      <button class="chip-btn${useDecStyle?' gold':''}" onclick="toggleDeckStyle()" title="Toggle card style">${useDecStyle?'♠ Deck':'🎴 UNO'}</button>
+      ${G.giftSubmitted
+        ? `<div class="room-msg">Waiting for other players to gift…</div>`
+        : `<button class="chip-btn gold" onclick="confirmGift()" ${G.selected.length!==3||violation?'disabled':''}>Gift selected →</button>`
+      }
+    </div>
   </div>
 
 </div>`;

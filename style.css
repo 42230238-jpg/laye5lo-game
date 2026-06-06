@@ -101,6 +101,42 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .card .corner.tl{top:4px;left:5px}
 .card .corner.br{bottom:4px;right:5px;transform:rotate(180deg)}
 
+/* ── DECK-MODE CARD OVERRIDES ────────────────────────────────
+   Applied when the player has switched to standard-deck style.
+   Same card color backgrounds; only the labels change.
+   Mapping: red=♥  yellow=♦  green=♣  blue=♠
+            1→A  0→10  draw2→Q  reverse→J  skip→K
+   ───────────────────────────────────────────────────────── */
+.card.deck-mode .csym{
+  font-size:var(--card-num-fs);   /* large suit symbol, same size as rank */
+  opacity:1;
+  text-transform:none;
+  letter-spacing:0;
+  margin-top:1px;
+}
+/* Corner stacks rank on top, suit symbol below — like a real card */
+.card.deck-mode .corner{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:0;
+  line-height:1;
+}
+.card.deck-mode .corner .dk-s{
+  font-size:0.78em;
+  font-weight:700;
+  line-height:1.15;
+  text-transform:none;
+  letter-spacing:0;
+}
+/* Fly-card suit label in deck mode */
+.fly-card.deck-mode .fly-sym{
+  font-size:var(--card-sym-fs);
+  opacity:1;
+  text-transform:none;
+  letter-spacing:0;
+}
+
 /* colors */
 .cr{background:linear-gradient(160deg,#ff4444 0%,#cc1111 100%);color:#fff}
 .cb{background:linear-gradient(160deg,#3388ff 0%,#1155cc 100%);color:#fff}
