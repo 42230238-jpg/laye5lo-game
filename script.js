@@ -535,11 +535,39 @@ try{useDecStyle=localStorage.getItem('leeCardStyle')==='deck';}catch(e){}
 const DECK_RANK={'0':'10','1':'A','draw2':'Q','reverse':'J','skip':'K'};
 const DECK_SUIT={red:'♥',yellow:'♦',green:'♣',blue:'♠'};
 
-window.toggleDeckStyle=function(){
-  useDecStyle=!useDecStyle;
-  try{localStorage.setItem('leeCardStyle',useDecStyle?'deck':'uno');}catch(e){}
+// Settings panel state (persists across renders)
+let settingsOpen=false;
+window.toggleSettings=function(){
+  settingsOpen=!settingsOpen;
+  renderSettings();
+};
+window.setDeckStyle=function(on){
+  useDecStyle=on;
+  settingsOpen=false;
+  try{localStorage.setItem('leeCardStyle',on?'deck':'uno');}catch(e){}
   render();
 };
+
+// Injects the ⚙ button + panel directly into #game so it survives re-renders
+function renderSettings(){
+  let sw=document.getElementById('settings-wrap');
+  if(!sw){
+    sw=document.createElement('div');
+    sw.id='settings-wrap';
+    const game=document.getElementById('game');
+    if(game)game.appendChild(sw);
+  }
+  sw.innerHTML=`
+    <button class="settings-btn" onclick="toggleSettings()">⚙</button>
+    ${settingsOpen?`<div class="settings-panel">
+      <div class="settings-title">Card Style</div>
+      <div class="settings-opts">
+        <button class="settings-opt${!useDecStyle?' on':''}" onclick="setDeckStyle(false)">🎴 UNO</button>
+        <button class="settings-opt${useDecStyle?' on':''}" onclick="setDeckStyle(true)">♠ Deck</button>
+      </div>
+    </div>`:''}
+  `;
+}
 
 // Returns the visible rank label for a card (respects current style preference)
 function displayLbl(c){
@@ -1056,6 +1084,7 @@ function render(){
   attachEvents();
   updateTimerBar();
   requestAnimationFrame(adjustHand);
+  renderSettings();
 }
 
 function buildHTML(){
@@ -1194,7 +1223,6 @@ function buildHTML(){
     <div id="my-hand">${handHTML}</div>
     <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;justify-content:center">
       <button class="chip-btn" onclick="showRules()">Rules</button>
-      <button class="chip-btn${useDecStyle?' gold':''}" onclick="toggleDeckStyle()" title="Toggle card style: UNO ↔ Playing cards">${useDecStyle?'♠ Deck':'🎴 UNO'}</button>
       ${!isOnline?`<button class="chip-btn gold" onclick="createOnlineRoom()">Create Room</button>
 <button class="chip-btn" onclick="joinOnlineRoom()">Join Room</button>`:''}
     </div>
@@ -1308,8 +1336,7 @@ function buildGiftHTML(){
       <span class="pscore">${G.scores[meSeat]}pts</span>
     </div>
     <div id="my-hand">${handHTML}</div>
-    <div style="display:flex;gap:8px;margin-top:4px;justify-content:center;align-items:center;flex-wrap:wrap">
-      <button class="chip-btn${useDecStyle?' gold':''}" onclick="toggleDeckStyle()" title="Toggle card style">${useDecStyle?'♠ Deck':'🎴 UNO'}</button>
+    <div style="display:flex;gap:8px;margin-top:4px;justify-content:center;align-items:center">
       ${G.giftSubmitted
         ? `<div class="room-msg">Waiting for other players to gift…</div>`
         : `<button class="chip-btn gold" onclick="confirmGift()" ${G.selected.length!==3||violation?'disabled':''}>Gift selected →</button>`
