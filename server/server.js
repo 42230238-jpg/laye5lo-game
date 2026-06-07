@@ -2,15 +2,40 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const { Server } = require("socket.io");
+const path = require("path");
+const fs   = require("fs");
 
 const app = express();
 const server = http.createServer(app);
 
+// ── Static files ─────────────────────────────────────────────
+// Serve every file in the project root (CSS, JS, HTML, sounds…)
+// as a static asset before any socket/API routes.
+app.use(express.static(path.join(__dirname)));
+
+// ── Explicit HTML page routes ─────────────────────────────────
+// These handle the case-sensitivity problem that happens on
+// Vercel/Linux: the file may be named UNO.html in the git repo
+// but the browser requests /uno.html (lowercase).
+// We try both casings so the game loads either way.
+function serveHtml(candidates) {
+  return (req, res, next) => {
+    for (const name of candidates) {
+      const p = path.join(__dirname, name);
+      if (fs.existsSync(p)) return res.sendFile(p);
+    }
+    next(); // fall through to 404 if neither exists
+  };
+}
+
+app.get("/uno.html",        serveHtml(["uno.html", "UNO.html"]));
+app.get("/UNO.html",        serveHtml(["uno.html", "UNO.html"]));
+app.get("/arba3meye.html",  serveHtml(["arba3meye.html"]));
+app.get("/index.html",      serveHtml(["index.html"]));
+
 app.use(cors());
 
-app.get("/", (req, res) => {
-  res.send("Laye5lo multiplayer server is running.");
-});
+
 
 const io = new Server(server, {
   cors: {
@@ -218,18 +243,7 @@ function botCardArba(game,pid) {
   return winners[0]||[...lg].sort((a,b)=>ARBA_RV[a.rank]-ARBA_RV[b.rank])[0];
 }
 function newArbaGame(names, scores=[0,0,0,0], round=1) {
-  // Rotate starting player each round: round 1 → seat 0, round 2 → seat 1, etc.
-  const startPlayer = (round - 1) % 4;
-  return {
-    names, phase:'bidding', hands:dealArbaHands(),
-    bids:[null,null,null,null],
-    bidIdx: startPlayer,   // first player to bid this round
-    bidsCount: 0,          // counts how many bids are in so far
-    startPlayer,           // carried forward for play-phase start
-    trick:[], led:null, wins:[0,0,0,0], scores,
-    cur: startPlayer,      // first player to play first card this round
-    round, busy:false, winner:null
-  };
+  return { names, phase:'bidding', hands:dealArbaHands(), bids:[null,null,null,null], bidIdx:0, trick:[], led:null, wins:[0,0,0,0], scores, cur:0, round, busy:false, winner:null };
 }
 function broadcastArba(roomCode) {
   const room=rooms[roomCode];
@@ -248,23 +262,10 @@ function scheduleArba(roomCode) {
 function applyArbaBid(roomCode,pid,bid) {
   const room=rooms[roomCode], game=room&&room.arbaGame;
   if(!game||game.phase!=='bidding'||game.bidIdx!==pid)return false;
-  game.bids[pid]=bid;
-  game.bidsCount = (game.bidsCount||0) + 1;
-  if(game.bidsCount < 4){
-    // Advance to the next player in circular order
-    game.bidIdx = (game.bidIdx + 1) % 4;
-    broadcastArba(roomCode); scheduleArba(roomCode); return true;
-  }
-  // All 4 bids collected — validate total >= 11
-  if(game.bids.reduce((s,x)=>s+(x||0),0)<11){
-    // Re-deal the same round with same starting player
-    room.arbaGame=newArbaGame(game.names,game.scores,game.round);
-    broadcastArba(roomCode); scheduleArba(roomCode); return true;
-  }
-  // Valid bids — play starts from this round's designated first player
-  game.phase='playing';
-  game.cur = game.startPlayer;
-  broadcastArba(roomCode); scheduleArba(roomCode); return true;
+  game.bids[pid]=bid; game.bidIdx++;
+  if(game.bidIdx<4){broadcastArba(roomCode); scheduleArba(roomCode); return true;}
+  if(game.bids.reduce((s,x)=>s+x,0)<11){ room.arbaGame=newArbaGame(game.names,game.scores,game.round); broadcastArba(roomCode); scheduleArba(roomCode); return true; }
+  game.phase='playing'; game.cur=0; broadcastArba(roomCode); scheduleArba(roomCode); return true;
 }
 function playArbaCard(roomCode,pid,cardId) {
   const room=rooms[roomCode], game=room&&room.arbaGame;
@@ -470,15 +471,13 @@ io.on("connection", (socket) => {
     if (game.gifts.every(Boolean)) {
       applyGifts(game);
       game.phase = 'play';
-      // Use the carry-over starter (set by startNextRound/dealGame), or 0 for round 1
-      const starter = game.nextRoundStarter != null ? game.nextRoundStarter : 0;
-      game.currentPlayer = starter;
+      game.currentPlayer = 0;
       game.leadColor = null;
       game.table = [];
       game.selected = [];
       game.trickComplete = false;
-      game.statusMsg = `${game.playerNames[starter]}'s turn`;
-      console.log(`Room ${roomCode}: all gifts done — play starts at seat ${starter}`);
+      game.statusMsg = `${game.playerNames[0]}'s turn`;
+      console.log(`Room ${roomCode}: all gifts done — transitioning to play phase`);
     }
 
     // Broadcast to all real players with personal seat index
@@ -586,14 +585,6 @@ function playCardForSeat(roomCode, seatIndex, cardId) {
 
     const winner = trickWinnerServer(game.table, game.leadColor);
     const wi = winner.pi;
-
-    // Track who captured the blue Lee (+2) — used to decide next-round start
-    const blueLeeInTrick = game.table.some(
-      t => t.card.color === 'blue' && t.card.type === 'draw2'
-    );
-    if (blueLeeInTrick) {
-      game.blueLeeWinner = wi;
-    }
 
     game.roundPts[wi] = (game.roundPts[wi] || 0) + trickPts;
 
@@ -723,13 +714,6 @@ function scheduleBotPlay(roomCode) {
       socket.emit("lobbyError", "Round is not over yet."); return;
     }
 
-    // ── Determine who starts the new round ──────────────────
-    // Rule: the player to the RIGHT of whoever captured the blue Lee (+2)
-    // leads the first trick of the next round.
-    const nextStarter = (game.blueLeeWinner != null)
-      ? (game.blueLeeWinner + 1) % 4
-      : 0; // first round / safety fallback
-
     // Deal a fresh deck, preserve names + cumulative scores
     const deck = shuffle(buildDeck());
     const hands = [[], [], [], []];
@@ -741,8 +725,7 @@ function scheduleBotPlay(roomCode) {
       hands: hands.map(sortHand),
       gifts: [null, null, null, null],
       table: [],
-      currentPlayer: nextStarter,   // stored so play phase can read it
-      nextRoundStarter: nextStarter, // explicit carry-over for submitGift
+      currentPlayer: 0,
       leadColor: null,
       scores: [...game.scores],   // keep cumulative scores
       roundPts: [0, 0, 0, 0],
@@ -756,7 +739,7 @@ function scheduleBotPlay(roomCode) {
       receivedGiftCardIdsBySeat: null,
     };
 
-    console.log(`Room ${roomCode}: host started next round — starter seat ${nextStarter} (blue-Lee winner was ${game.blueLeeWinner})`);
+    console.log(`Room ${roomCode}: host started next round — fresh deck dealt`);
     broadcastGameState(roomCode);
 
     // Kick off bot gifts if needed
@@ -769,11 +752,11 @@ function scheduleBotPlay(roomCode) {
     if (room.game.gifts.every(Boolean)) {
       applyGifts(room.game);
       room.game.phase = 'play';
-      room.game.currentPlayer = nextStarter;
-      room.game.statusMsg = `${room.game.playerNames[nextStarter]}'s turn`;
+      room.game.currentPlayer = 0;
+      room.game.statusMsg = `${room.game.playerNames[0]}'s turn`;
       broadcastGameState(roomCode);
-      // Kick off bot play if the starting seat is a bot
-      if (isBotSeat(room, nextStarter)) {
+      // Kick off bot play if seat 0 is a bot
+      if (isBotSeat(room, 0)) {
         setTimeout(() => scheduleBotPlay(roomCode), 750);
       }
     }
@@ -866,6 +849,49 @@ function scheduleBotPlay(roomCode) {
     scheduleArba(roomCode);
   });
 
+  // ── VOICE CHAT — WebRTC signaling relay ─────────────────
+  // The server never touches audio; it only forwards SDP and
+  // ICE messages between peers so they can connect directly.
+
+  socket.on("voice-join", ({ roomCode }) => {
+    const rc = (roomCode || "").toUpperCase().trim().replace(/[^A-Z0-9]/g, "");
+    const room = rooms[rc];
+    if (!room) return;
+    const myIdx = room.seats.findIndex(s => s && s.id === socket.id);
+    if (myIdx < 0) return;
+
+    // Players already in voice in this room
+    const existing = room.seats
+      .map((s, idx) => ({ s, idx }))
+      .filter(({ s }) => s && s.id && s.id !== socket.id && s.inVoice)
+      .map(({ s, idx }) => ({ peerId: s.id, seatIndex: idx }));
+
+    // Tell the new joiner who is already there
+    socket.emit("voice-peers-existing", { peers: existing });
+
+    // Tell everyone already in voice about the new joiner
+    existing.forEach(({ peerId }) =>
+      io.to(peerId).emit("voice-peer-joined", { peerId: socket.id, seatIndex: myIdx })
+    );
+
+    room.seats[myIdx].inVoice = true;
+    console.log(`Room ${rc}: seat ${myIdx} joined voice (${existing.length} existing peers)`);
+  });
+
+  socket.on("voice-leave", ({ roomCode }) => {
+    const rc = (roomCode || "").toUpperCase().trim().replace(/[^A-Z0-9]/g, "");
+    const room = rooms[rc];
+    if (!room) return;
+    const myIdx = room.seats.findIndex(s => s && s.id === socket.id);
+    if (myIdx >= 0 && room.seats[myIdx]) room.seats[myIdx].inVoice = false;
+    socket.to(rc).emit("voice-peer-left", { peerId: socket.id });
+  });
+
+  // Pure relay — the server just forwards SDP/ICE between the two peers
+  socket.on("voice-offer",  ({ targetId, offer })     => io.to(targetId).emit("voice-offer",  { fromId: socket.id, offer }));
+  socket.on("voice-answer", ({ targetId, answer })    => io.to(targetId).emit("voice-answer", { fromId: socket.id, answer }));
+  socket.on("voice-ice",    ({ targetId, candidate }) => io.to(targetId).emit("voice-ice",    { fromId: socket.id, candidate }));
+
   socket.on("disconnect", () => {
     for (const roomCode of Object.keys(rooms)) {
       const room = rooms[roomCode];
@@ -891,6 +917,8 @@ function scheduleBotPlay(roomCode) {
 
       if (changed) {
         io.to(roomCode).emit(room.gameType === "arba3meye" ? "arbaRoomUpdated" : "roomUpdated", roomPayload(roomCode));
+        // Tell any voice-connected players that this peer is gone
+        socket.to(roomCode).emit("voice-peer-left", { peerId: socket.id });
       }
     }
 
