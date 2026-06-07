@@ -102,19 +102,51 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .card .corner.br{bottom:4px;right:5px;transform:rotate(180deg)}
 
 /* ── DECK-MODE CARD OVERRIDES ────────────────────────────────
-   Applied when the player has switched to standard-deck style.
-   Same card color backgrounds; only the labels change.
-   Mapping: red=♥  yellow=♦  green=♣  blue=♠
-            1→A  0→10  draw2→Q  reverse→J  skip→K
+   Real playing-card look: white background, suit determines text color.
+   ♥ Hearts  (red cards)  = was UNO red    (.cr)
+   ♦ Diamonds(red cards)  = was UNO yellow (.cy)
+   ♣ Clubs   (black cards)= was UNO green  (.cg)
+   ♠ Spades  (black cards)= was UNO blue   (.cb)
+   Rank map: 1→A  0→10  draw2→Q  reverse→J  skip→K  (2-9 unchanged)
    ───────────────────────────────────────────────────────── */
+
+/* White card base */
+.card.deck-mode,
+.fly-card.deck-mode{
+  background:#fff;
+  box-shadow:1px 3px 10px rgba(0,0,0,0.22),0 0 0 1px rgba(0,0,0,0.10);
+}
+/* Inner border: subtle gray instead of white-on-white */
+.card.deck-mode::before{
+  border-color:rgba(0,0,0,0.08);
+}
+
+/* ── Red suits: Hearts (.cr) and Diamonds (.cy) ── */
+.card.deck-mode.cr,
+.card.deck-mode.cy,
+.fly-card.deck-mode.cr,
+.fly-card.deck-mode.cy{
+  background:#fff;
+  color:#c8102e;
+}
+/* ── Black suits: Clubs (.cg) and Spades (.cb) ── */
+.card.deck-mode.cg,
+.card.deck-mode.cb,
+.fly-card.deck-mode.cg,
+.fly-card.deck-mode.cb{
+  background:#fff;
+  color:#111;
+}
+
+/* Center suit symbol — large and fully opaque, inherits red/black */
 .card.deck-mode .csym{
-  font-size:var(--card-num-fs);   /* large suit symbol, same size as rank */
+  font-size:var(--card-num-fs);
   opacity:1;
   text-transform:none;
   letter-spacing:0;
   margin-top:1px;
 }
-/* Corner stacks rank on top, suit symbol below — like a real card */
+/* Corner: rank above, suit symbol below — stacked like a real card */
 .card.deck-mode .corner{
   display:flex;
   flex-direction:column;
@@ -129,7 +161,16 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   text-transform:none;
   letter-spacing:0;
 }
-/* Fly-card suit label in deck mode */
+/* Point-value badge — light bg so it shows on white */
+.card.deck-mode .ptag{
+  background:rgba(0,0,0,0.10);
+  color:inherit;
+}
+/* Playable hover ring — dark outline works on white */
+.card.deck-mode.playable:hover{
+  box-shadow:0 0 0 2px rgba(0,0,0,0.35),2px 6px 14px rgba(0,0,0,0.20);
+}
+/* Fly-card suit label */
 .fly-card.deck-mode .fly-sym{
   font-size:var(--card-sym-fs);
   opacity:1;
