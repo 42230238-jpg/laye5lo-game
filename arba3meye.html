@@ -443,6 +443,51 @@ body{
   .menu-btn{height:34px;font-size:12px}
   .sweep-card{width:var(--card-w);height:var(--card-h)}
 }
+
+/* ── DECK-MODE CARD OVERRIDES ──────────────────────────────
+   Real playing-card look: white background, suit-based text color.
+   ♥ Hearts  (.cr)   ♦ Diamonds (.cy)  → red text
+   ♣ Clubs   (.cg)   ♠ Spades   (.cb)  → black text
+   ───────────────────────────────────────────────────────── */
+.card.deck-mode,.fly-card.deck-mode{background:#fff!important;box-shadow:1px 3px 10px rgba(0,0,0,0.22),0 0 0 1px rgba(0,0,0,0.10)!important}
+.card.deck-mode::before{border-color:rgba(0,0,0,0.08)!important}
+.card.deck-mode.cr,.card.deck-mode.cy,.fly-card.deck-mode.cr,.fly-card.deck-mode.cy{background:#fff!important;color:#c8102e!important}
+.card.deck-mode.cg,.card.deck-mode.cb,.fly-card.deck-mode.cg,.fly-card.deck-mode.cb{background:#fff!important;color:#111!important}
+.card.deck-mode .csym{font-size:var(--card-num-fs);opacity:1;text-transform:none;letter-spacing:0;margin-top:1px}
+.card.deck-mode .corner{display:flex;flex-direction:column;align-items:center;gap:0;line-height:1}
+.card.deck-mode .corner .dk-s{font-size:0.78em;font-weight:700;line-height:1.15;text-transform:none;letter-spacing:0}
+.card.deck-mode.playable:hover{box-shadow:0 0 0 2px rgba(0,0,0,0.35),2px 6px 14px rgba(0,0,0,0.20)}
+.fly-card.deck-mode .fly-sym{font-size:var(--card-sym-fs);opacity:1;text-transform:none;letter-spacing:0}
+
+/* ── SETTINGS BUTTON & PANEL ── */
+#settings-wrap{position:absolute;top:10px;right:12px;z-index:200}
+.settings-btn{
+  width:32px;height:32px;border-radius:50%;
+  background:rgba(0,0,0,0.42);border:1px solid rgba(255,255,255,0.18);
+  color:rgba(255,255,255,0.82);font-size:15px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background 0.15s;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+}
+.settings-btn:hover{background:rgba(0,0,0,0.65)}
+.settings-panel{
+  position:absolute;top:38px;right:0;
+  background:rgba(8,24,14,0.97);
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:12px;padding:12px 14px;min-width:148px;
+  box-shadow:0 6px 24px rgba(0,0,0,0.65);
+}
+.settings-title{color:rgba(255,255,255,0.5);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.settings-opts{display:flex;gap:6px}
+.settings-opt{
+  flex:1;padding:6px 8px;border-radius:8px;
+  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
+  color:rgba(255,255,255,0.65);font-size:12px;font-weight:600;cursor:pointer;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+  transition:all 0.12s;
+}
+.settings-opt:hover{background:rgba(255,255,255,0.13)}
+.settings-opt.on{background:rgba(255,224,102,0.18);border-color:rgba(255,224,102,0.42);color:#ffe066}
 </style>
 
 <body>
@@ -463,6 +508,59 @@ const RV={'1':13,'skip':12,'+2':11,'reverse':10,'0':9,'9':8,'8':7,'7':6,'6':5,'5
 const SCRTBL={2:2,3:3,4:4,5:10,6:12,7:14,8:16,9:27};
 const CC={red:'cr',blue:'cb',yellow:'cy',green:'cg'};
 const RD={'1':'1','skip':'⊘','+2':'+2','reverse':'↺','0':'0','9':'9','8':'8','7':'7','6':'6','5':'5','4':'4','3':'3','2':'2'};
+
+// ── DECK-STYLE CARD PREFERENCE ─────────────────────────────
+// Client-side only — each player picks independently.
+// red=♥  yellow=♦  green=♣  blue=♠
+// 1→A  0→10  +2→Q  reverse→J  skip→K  (2-9 unchanged)
+const DECK_RANK={'+2':'Q','reverse':'J','skip':'K','0':'10','1':'A'};
+const DECK_SUIT={red:'♥',yellow:'♦',green:'♣',blue:'♠'};
+let useDecStyle=false;
+try{useDecStyle=localStorage.getItem('arbaCardStyle')==='deck';}catch(e){}
+let settingsOpen=false;
+
+window.toggleSettings=function(){
+  settingsOpen=!settingsOpen;
+  renderSettings();
+};
+window.setDeckStyle=function(on){
+  useDecStyle=on;
+  settingsOpen=false;
+  try{localStorage.setItem('arbaCardStyle',on?'deck':'uno');}catch(e){}
+  r();
+};
+
+function dRank(rank){
+  if(!useDecStyle)return RD[rank]||rank;
+  return DECK_RANK[rank]!==undefined?DECK_RANK[rank]:(RD[rank]||rank);
+}
+function dSym(color){return useDecStyle?(DECK_SUIT[color]||color):color;}
+// Returns corner HTML: rank stacked above suit symbol in deck mode
+function cCorner(rank,color){
+  const rl=dRank(rank);
+  if(!useDecStyle)return rl;
+  return `${rl}<span class="dk-s">${dSym(color)}</span>`;
+}
+
+function renderSettings(){
+  let sw=document.getElementById('settings-wrap');
+  if(!sw){
+    sw=document.createElement('div');
+    sw.id='settings-wrap';
+    const game=document.getElementById('game');
+    if(game)game.appendChild(sw);
+  }
+  sw.innerHTML=`
+    <button class="settings-btn" onclick="toggleSettings()">⚙</button>
+    ${settingsOpen?`<div class="settings-panel">
+      <div class="settings-title">Card Style</div>
+      <div class="settings-opts">
+        <button class="settings-opt${!useDecStyle?' on':''}" onclick="setDeckStyle(false)">🎴 UNO</button>
+        <button class="settings-opt${useDecStyle?' on':''}" onclick="setDeckStyle(true)">♠ Deck</button>
+      </div>
+    </div>`:''}
+  `;
+}
 const WIN=41;
 let NAMES=['You','Bot 1','Bot 2','Bot 3'];
 const BACKEND_URL = "https://laye5lo-game.onrender.com";
@@ -604,11 +702,12 @@ socket.on('arbaJoinError',msg=>{G={...G,screen:'customRoom',roomMode:'join',room
 function r(){
   const app=document.getElementById('app');
   if(!app)return;
-  if(G.screen==='menu'){app.innerHTML=menuHTML();return;}
-  if(G.screen==='rules'){app.innerHTML=rulesHTML();return;}
-  if(G.screen==='customRoom'){app.innerHTML=customRoomHTML();return;}
-  if(G.screen==='roomLobby'){app.innerHTML=roomLobbyHTML();return;}
+  if(G.screen==='menu'){app.innerHTML=menuHTML();renderSettings();return;}
+  if(G.screen==='rules'){app.innerHTML=rulesHTML();renderSettings();return;}
+  if(G.screen==='customRoom'){app.innerHTML=customRoomHTML();renderSettings();return;}
+  if(G.screen==='roomLobby'){app.innerHTML=roomLobbyHTML();renderSettings();return;}
   app.innerHTML=gameHTML();
+  renderSettings();
   // attach hand click once
   const hEl=document.getElementById('my-hand');
   if(hEl) hEl.onclick=e=>{
@@ -879,11 +978,11 @@ function gameHTML(){
     </div>
     <div id="my-hand">
       ${myHand.map(c=>{const pl=lset.has(c.id);const un=myTurn&&!pl;
-        return`<div class="card ${CC[c.color]}${pl?' playable':''}${un?' unplayable':''}" data-id="${c.id}">
-          <span class="corner tl">${RD[c.rank]}</span>
-          <span class="cnum">${RD[c.rank]}</span>
-          <span class="csym">${c.color}</span>
-          <span class="corner br">${RD[c.rank]}</span>
+        return`<div class="card ${CC[c.color]}${useDecStyle?' deck-mode':''}${pl?' playable':''}${un?' unplayable':''}" data-id="${c.id}">
+          <span class="corner tl">${cCorner(c.rank,c.color)}</span>
+          <span class="cnum">${dRank(c.rank)}</span>
+          <span class="csym">${dSym(c.color)}</span>
+          <span class="corner br">${cCorner(c.rank,c.color)}</span>
         </div>`;}).join('')}
     </div>
   </div>
@@ -892,11 +991,11 @@ ${modal}`;
 }
 
 function cHTML(card){
-  return`<div class="card table-card ${CC[card.color]}">
-    <span class="corner tl">${RD[card.rank]}</span>
-    <span class="cnum">${RD[card.rank]}</span>
-    <span class="csym">${card.color}</span>
-    <span class="corner br">${RD[card.rank]}</span>
+  return`<div class="card table-card ${CC[card.color]}${useDecStyle?' deck-mode':''}">
+    <span class="corner tl">${cCorner(card.rank,card.color)}</span>
+    <span class="cnum">${dRank(card.rank)}</span>
+    <span class="csym">${dSym(card.color)}</span>
+    <span class="corner br">${cCorner(card.rank,card.color)}</span>
   </div>`;
 }
 
@@ -1113,8 +1212,8 @@ function flyCard(pid,card,cb){
     3:{x:gr.left+42,         y:gr.top+gr.height/2},
   }[pid];
   const fc=document.createElement('div');
-  fc.className=`fly-card ${CC[card.color]}`;
-  fc.innerHTML=`<span class="fly-label">${RD[card.rank]}</span><span class="fly-sym">${card.color}</span>`;
+  fc.className=`fly-card ${CC[card.color]}${useDecStyle?' deck-mode':''}`;
+  fc.innerHTML=`<span class="fly-label">${dRank(card.rank)}</span><span class="fly-sym">${dSym(card.color)}</span>`;
   // Place at source, no transition, invisible — so no premature movement
   fc.style.left=src.x+'px';
   fc.style.top=src.y+'px';
