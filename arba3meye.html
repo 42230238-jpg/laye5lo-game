@@ -518,6 +518,72 @@ const DECK_SUIT={red:'♥',yellow:'♦',green:'♣',blue:'♠'};
 let useDecStyle=false;
 try{useDecStyle=localStorage.getItem('arbaCardStyle')==='deck';}catch(e){}
 let settingsOpen=false;
+const ARBA_SFX = (() => {
+  const clips=[1,2,3,4].map(n=>new Audio(`sounds/arba3meye-${n}.m4a`));
+  let lastKey='';
+  function isHighNonRedLead(card){
+    return !!card&&['blue','green','yellow'].includes(card.color)&&['1','skip','+2','reverse'].includes(card.rank);
+  }
+  function shouldPlay(card,leadCard){
+    return !!card&&card.color==='red'&&isHighNonRedLead(leadCard);
+  }
+  function play(card,key='',leadCard=null){
+    if(!shouldPlay(card,leadCard))return;
+    if(key&&key===lastKey)return;
+    if(key)lastKey=key;
+    const base=clips[Math.random()*clips.length|0];
+    try{
+      const a=base.cloneNode();
+      a.volume=0.95;
+      a.play().catch(()=>{});
+    }catch(e){}
+  }
+  return {play};
+})();
+const ARBA_GENERIC_SFX = (() => {
+  let ctx=null;
+  function getCtx(){
+    if(!ctx)ctx=new (window.AudioContext||window.webkitAudioContext)();
+    return ctx;
+  }
+  function playTone(freq,type,duration,gain=0.18,delay=0){
+    try{
+      const ac=getCtx();
+      const osc=ac.createOscillator();
+      const gainNode=ac.createGain();
+      osc.connect(gainNode);
+      gainNode.connect(ac.destination);
+      osc.type=type;
+      osc.frequency.setValueAtTime(freq,ac.currentTime+delay);
+      gainNode.gain.setValueAtTime(0,ac.currentTime+delay);
+      gainNode.gain.linearRampToValueAtTime(gain,ac.currentTime+delay+0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+delay+duration);
+      osc.start(ac.currentTime+delay);
+      osc.stop(ac.currentTime+delay+duration+0.05);
+    }catch(e){}
+  }
+  function playCardPlay(){
+    try{
+      const ac=getCtx();
+      const osc=ac.createOscillator();
+      const gainNode=ac.createGain();
+      osc.connect(gainNode);
+      gainNode.connect(ac.destination);
+      osc.type='sine';
+      osc.frequency.setValueAtTime(520,ac.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(200,ac.currentTime+0.18);
+      gainNode.gain.setValueAtTime(0.14,ac.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.22);
+      osc.start(ac.currentTime);
+      osc.stop(ac.currentTime+0.25);
+    }catch(e){}
+  }
+  function playMyTurn(){
+    playTone(520,'sine',0.12,0.13,0);
+    playTone(780,'sine',0.18,0.10,0.13);
+  }
+  return {playCardPlay,playMyTurn};
+})();
 
 window.toggleSettings=function(){
   settingsOpen=!settingsOpen;
@@ -642,6 +708,27 @@ let G={
 };
 let BT=null;
 let startingOnlineGame=false;
+let lastGenericCardSfxKey='';
+let lastTurnSfxKey='';
+
+function playGenericCardSfx(key=''){
+  if(key&&key===lastGenericCardSfxKey)return;
+  if(key)lastGenericCardSfxKey=key;
+  ARBA_GENERIC_SFX.playCardPlay();
+}
+function resetGenericSfxGuards(){
+  lastGenericCardSfxKey='';
+  lastTurnSfxKey='';
+}
+function maybePlayMyTurnSfx(state=G){
+  if(!state||state.screen!=='game'||state.phase!=='playing'||state.busy)return;
+  if(state.cur!==mySeatIndex)return;
+  if(!state.hands||!state.hands[mySeatIndex]||state.hands[mySeatIndex].length===0)return;
+  const key=`${state.roomCode||'local'}-${state.round}-${state.trick?.length||0}-${state.cur}-${state.hands[mySeatIndex].length}`;
+  if(key===lastTurnSfxKey)return;
+  lastTurnSfxKey=key;
+  ARBA_GENERIC_SFX.playMyTurn();
+}
 
 function makeRoomCode(){
   const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -679,6 +766,7 @@ socket.on('arbaRoomUpdated',data=>{
 });
 socket.on('arbaGameStarted',data=>{
   mySeatIndex=data.mySeatIndex||0;
+  resetGenericSfxGuards();
   NAMES=data.gameState.names||NAMES;
   const nextG={...data.gameState,screen:'game',roomCode:data.roomCode,roomPlayers:G.roomPlayers,isHost:G.isHost,roomMsg:''};
   startingOnlineGame=true;
@@ -688,6 +776,14 @@ socket.on('arbaGameStarted',data=>{
 });
 socket.on('arbaGameState',data=>{
   if(startingOnlineGame)return;
+  const oldTrickLen=Array.isArray(G.trick)?G.trick.length:0;
+  const newTrick=data.gameState&&Array.isArray(data.gameState.trick)?data.gameState.trick:[];
+  if(newTrick.length>oldTrickLen){
+    const entry=newTrick[newTrick.length-1];
+    const key=`${data.gameState.round}-${newTrick.length}-${entry.pid}-${entry.card.id}`;
+    playGenericCardSfx(key);
+    ARBA_SFX.play(entry.card,key,newTrick[0]?.card);
+  }
   mySeatIndex=data.mySeatIndex||mySeatIndex;
   NAMES=data.gameState.names||NAMES;
   G={...data.gameState,screen:'game',roomCode:data.roomCode,roomPlayers:G.roomPlayers,isHost:G.isHost,roomMsg:''};
@@ -718,6 +814,7 @@ function r(){
   };
   requestAnimationFrame(adjustHand);
   sched();
+  maybePlayMyTurnSfx();
 }
 
 // ─── MENU ────────────────────────────
@@ -1032,6 +1129,7 @@ function copyRoomCode(){
 
 function startGame(){
   clearBT();
+  resetGenericSfxGuards();
   mySeatIndex=0;
   NAMES=['You','Bot 1','Bot 2','Bot 3'];
   G=resetRound(false);
@@ -1041,6 +1139,7 @@ function startGame(){
 function nextRound(){
   if(G.roomCode){socket.emit('startArbaNextRound',{roomCode:G.roomCode});return;}
   clearBT();
+  resetGenericSfxGuards();
   G=resetRound(true);
   showShuf(()=>{r();});
 }
@@ -1107,7 +1206,16 @@ function sched(){
 }
 
 function playerPlay(card){
-  if(G.roomCode){socket.emit('arbaPlayCard',{roomCode:G.roomCode,cardId:card.id});return;}
+  if(G.roomCode){
+    if(G.phase!=='playing'||G.cur!==mySeatIndex||G.busy)return;
+    const lg=legal(G.hands[mySeatIndex],G.led,G.trick.length===0);
+    if(!lg.find(c=>c.id===card.id))return;
+    const key=`${G.round}-${(G.trick?.length||0)+1}-${mySeatIndex}-${card.id}`;
+    playGenericCardSfx(key);
+    ARBA_SFX.play(card,key,G.trick?.[0]?.card);
+    socket.emit('arbaPlayCard',{roomCode:G.roomCode,cardId:card.id});
+    return;
+  }
   if(G.phase!=='playing'||G.cur!==0||G.busy)return;
   const lg=legal(G.hands[0],G.led,G.trick.length===0);
   if(!lg.find(c=>c.id===card.id))return;
@@ -1127,6 +1235,9 @@ function playerPlay(card){
 }
 
 function execPlay(pid,card){
+  const key=`${G.round}-${G.trick.length+1}-${pid}-${card.id}`;
+  playGenericCardSfx(key);
+  ARBA_SFX.play(card,key,G.trick[0]?.card);
   // remove from hand
   G.hands[pid]=G.hands[pid].filter(c=>c.id!==card.id);
   // set led color on first card of trick
