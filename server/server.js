@@ -7,11 +7,12 @@ const fs   = require("fs");
 
 const app = express();
 const server = http.createServer(app);
+const PROJECT_ROOT = path.join(__dirname, "..");
 
 // ── Static files ─────────────────────────────────────────────
 // Serve every file in the project root (CSS, JS, HTML, sounds…)
 // as a static asset before any socket/API routes.
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(PROJECT_ROOT));
 
 // ── Explicit HTML page routes ─────────────────────────────────
 // These handle the case-sensitivity problem that happens on
@@ -21,7 +22,7 @@ app.use(express.static(path.join(__dirname)));
 function serveHtml(candidates) {
   return (req, res, next) => {
     for (const name of candidates) {
-      const p = path.join(__dirname, name);
+      const p = path.join(PROJECT_ROOT, name);
       if (fs.existsSync(p)) return res.sendFile(p);
     }
     next(); // fall through to 404 if neither exists
