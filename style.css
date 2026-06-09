@@ -258,6 +258,40 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 }
 .slot-bottom .played-name{ order:1; }
 
+.last-trick-preview{
+  position:absolute;
+  top:10px;
+  right:52px;
+  z-index:12;
+  display:grid;
+  grid-template-columns:repeat(2,24px);
+  gap:2px;
+  padding:3px;
+  border-radius:7px;
+  background:rgba(0,0,0,0.18);
+  border:1px solid rgba(255,255,255,0.08);
+  pointer-events:none;
+}
+.last-trick-card{
+  width:24px;
+  height:36px;
+}
+.last-trick-preview .card{
+  width:24px;
+  height:36px;
+  border-radius:4px;
+  font-size:8px;
+  box-shadow:1px 2px 5px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.28);
+  cursor:default;
+}
+.last-trick-preview .card::before{inset:1px;border-radius:3px;border-width:1px}
+.last-trick-preview .card .cnum{font-size:9px}
+.last-trick-preview .card .csym{font-size:5px;margin-top:1px;letter-spacing:0}
+.last-trick-preview .card .corner{font-size:5px}
+.last-trick-preview .card .corner.tl{top:2px;left:2px}
+.last-trick-preview .card .corner.br{bottom:2px;right:2px}
+.last-trick-preview .card .ptag{display:none}
+
 .table-card{transition:transform 0.25s;}
 
 .status-bar{
@@ -739,6 +773,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   }
   #game{border-radius:0;min-height:0;padding:0}
   #game::after{top:6px;left:6px;right:6px;bottom:6px}
+  .last-trick-preview{top:8px;right:46px;grid-template-columns:repeat(2,22px)}
+  .last-trick-card,.last-trick-preview .card{width:22px;height:33px}
   #my-hand{justify-content:flex-start;padding:0 2px;width:100%}
   .sweep-card{width:var(--card-w);height:var(--card-h)}
 }
@@ -780,6 +816,11 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   .tz-mid{gap:3px;min-height:0}
   .tz-btm{gap:2px;padding-bottom:3px}
   .status-bar{font-size:10px;min-width:145px;padding:3px 10px}
+  .last-trick-preview{top:5px;right:44px;grid-template-columns:repeat(2,18px);gap:1px;padding:2px}
+  .last-trick-card,.last-trick-preview .card{width:18px;height:27px;border-radius:3px}
+  .last-trick-preview .card .cnum{font-size:7px}
+  .last-trick-preview .card .corner{font-size:4px}
+  .last-trick-preview .card .csym{font-size:4px}
   .menu-screen{gap:14px;padding:16px 14px}
   .menu-btn{height:34px;font-size:12px}
   .sweep-card{width:var(--card-w);height:var(--card-h)}

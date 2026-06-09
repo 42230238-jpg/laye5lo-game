@@ -115,6 +115,24 @@ body{
 .slot-right{right:0;top:50%;transform:translateY(-50%)}
 .played-name{font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.9);order:-1;white-space:nowrap}
 .slot-bottom .played-name{order:1}
+.last-trick-preview{
+  position:absolute;top:4px;right:6px;z-index:12;
+  display:grid;grid-template-columns:repeat(2,24px);gap:2px;
+  padding:3px;border-radius:7px;background:rgba(0,0,0,0.18);
+  border:1px solid rgba(255,255,255,0.08);pointer-events:none;
+}
+.last-trick-card{width:24px;height:36px}
+.last-trick-preview .card{
+  width:24px;height:36px;border-radius:4px;font-size:8px;
+  box-shadow:1px 2px 5px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.28);
+  cursor:default;
+}
+.last-trick-preview .card::before{inset:1px;border-radius:3px;border-width:1px}
+.last-trick-preview .card .cnum{font-size:9px}
+.last-trick-preview .card .csym{font-size:5px;margin-top:1px;letter-spacing:0}
+.last-trick-preview .card .corner{font-size:5px}
+.last-trick-preview .card .corner.tl{top:2px;left:2px}
+.last-trick-preview .card .corner.br{bottom:2px;right:2px}
 
 /* ── STATUS / CHIPS ── */
 .status-bar{background:rgba(0,0,0,0.45);border-radius:20px;padding:5px 18px;
@@ -385,6 +403,8 @@ body{
   .tz-left,.tz-right{padding-top:0;justify-content:center;overflow:hidden}
   .tz-mid{gap:4px;min-height:0}
   .tz-btm{gap:4px;padding-bottom:5px}
+  .last-trick-preview{top:4px;right:4px;grid-template-columns:repeat(2,22px)}
+  .last-trick-card,.last-trick-preview .card{width:22px;height:33px}
   .table-played{width:178px;height:174px}
   .status-bar{font-size:11px;min-width:170px;padding:4px 12px}
   .bid-panel{padding:10px 12px;gap:7px}
@@ -435,6 +455,11 @@ body{
   .tz-left,.tz-right{padding-top:0;justify-content:center}
   .tz-mid{min-height:0;gap:3px}
   .tz-btm{gap:2px;padding-bottom:3px}
+  .last-trick-preview{top:3px;right:3px;grid-template-columns:repeat(2,18px);gap:1px;padding:2px}
+  .last-trick-card,.last-trick-preview .card{width:18px;height:27px;border-radius:3px}
+  .last-trick-preview .card .cnum{font-size:7px}
+  .last-trick-preview .card .corner{font-size:4px}
+  .last-trick-preview .card .csym{font-size:4px}
   .table-played{width:150px;height:138px}
   #my-hand{height:66px;gap:0;justify-content:flex-start;padding:0 3px}
   .bid-panel{padding:6px 10px;gap:5px}
@@ -704,7 +729,7 @@ let G={
   bids:[null,null,null,null],bidIdx:0,
   trick:[],led:null,
   wins:[0,0,0,0],scores:[0,0,0,0],
-  cur:0,round:1,busy:false,winner:null
+  cur:0,round:1,busy:false,winner:null,lastTrick:null
 };
 let BT=null;
 let startingOnlineGame=false;
@@ -750,7 +775,8 @@ function resetRound(keepScores){
     wins:[0,0,0,0],
     scores:keepScores?G.scores:[0,0,0,0],
     cur:0,busy:false,winner:null,
-    round:keepScores?G.round+1:1
+    round:keepScores?G.round+1:1,
+    lastTrick:null
   };
 }
 
@@ -1040,6 +1066,7 @@ function gameHTML(){
   <div style="font-size:10px;color:rgba(255,255,255,.4);font-weight:700;min-width:28px;text-align:right">R${G.round}</div>
 </div>
 <div id="table-wrap">
+  ${lastTrickHTML()}
   <div class="tz-top">
     <div style="display:flex;flex-direction:column;align-items:center;gap:3px">
       ${av(rel(2),'B2')}
@@ -1093,6 +1120,13 @@ function cHTML(card){
     <span class="cnum">${dRank(card.rank)}</span>
     <span class="csym">${dSym(card.color)}</span>
     <span class="corner br">${cCorner(card.rank,card.color)}</span>
+  </div>`;
+}
+function lastTrickHTML(){
+  const trick=Array.isArray(G.lastTrick)?G.lastTrick:[];
+  if(!trick.length)return '';
+  return`<div class="last-trick-preview" aria-label="Last trick">
+    ${trick.map(t=>`<div class="last-trick-card">${cHTML(t.card)}</div>`).join('')}
   </div>`;
 }
 
@@ -1258,6 +1292,7 @@ function execPlay(pid,card){
 
 function finishTrick(){
   // called after 1.5s display — clear table and handle round/game end
+  G.lastTrick=G.trick.map(t=>({pid:t.pid,card:t.card}));
   G.trick=[];
   G.led=null;
   if(G.hands[0].length===0){

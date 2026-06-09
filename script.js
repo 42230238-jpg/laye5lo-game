@@ -390,6 +390,9 @@ socket.on("gameState", (data) => {
     const lastCard  = gs.playedCards ? gs.playedCards[newPlayed - 1] : null;
     if (fourthPi !== undefined && lastCard) newEntry = { pi: fourthPi, card: lastCard };
   }
+  const inferredLastTrick = trickEnded
+    ? [...prevTable, ...(newEntry ? [{pi:newEntry.pi, card:newEntry.card}] : [])]
+    : null;
 
   // Capture old rendered slot positions while they still exist in the DOM
   let prevSlotRects = [];
@@ -409,6 +412,7 @@ socket.on("gameState", (data) => {
   // ── Update G ─────────────────────────────────────────────────
   G = {
     ...gs,
+    lastTrick:   Array.isArray(gs.lastTrick) ? gs.lastTrick : (inferredLastTrick || G.lastTrick || null),
     roomCode:      data.roomCode,
     isHost:        G.isHost,
     giftSubmitted: gs.phase === 'gift' ? (G.giftSubmitted || false) : false,
@@ -715,7 +719,7 @@ function initGame(names=[...DEFAULT_NAMES]){
   deck.forEach((c,i)=>hands[i%4].push(c));
   G={phase:'gift',hands:hands.map(sortHand),gifts:[null,null,null,null],table:[],
      currentPlayer:0,leadColor:null,scores:[0,0,0,0],roundPts:[0,0,0,0],
-     selected:[],statusMsg:`Choose 3 cards to gift to ${pname(1)}`,botThought:'',playedCards:[],knownGiftedLees:[],modal:null};
+     selected:[],statusMsg:`Choose 3 cards to gift to ${pname(1)}`,botThought:'',playedCards:[],knownGiftedLees:[],lastTrick:null,modal:null};
   resolving=false;giftedIds=new Set();stopTimer();
   // Show shuffle+deal animation, then render gift phase
   G.phase='shuffling'; render();
@@ -994,6 +998,7 @@ function finishTrick(){
   const _winRp=(wi-mySeatIndex+4)%4;
   const _winSels=['.tz-btm .avatar','.tz-right .avatar','.tz-top2 .avatar','.tz-left .avatar'];
   const _winPt=ANIM.center(_winSels[_winRp])||{x:window.innerWidth/2,y:window.innerHeight/2};
+  G.lastTrick=G.table.map(t=>({pi:t.pi,card:t.card}));
   G.table=[];G.leadColor=null;
   render(); // clear table visually before sweep
   ANIM.sweepTrick(_slotRects,_winPt.x,_winPt.y,()=>{
@@ -1031,7 +1036,7 @@ function doGifts(){
   for(let i=0;i<4;i++)gs[i].forEach(c=>nh[(i+1)%4].push(c));
   // capture the 3 cards that came to player 0 (gs[3] gifted to player 0 = gs[(3+1)%4=0])
   const incomingGift=gs[3]; // bot3 gifts to player 0
-  G.hands=nh.map(sortHand);G.phase='play';G.currentPlayer=nextRoundStarter;G.leadColor=null;G.table=[];G.selected=[];
+  G.hands=nh.map(sortHand);G.phase='play';G.currentPlayer=nextRoundStarter;G.leadColor=null;G.table=[];G.selected=[];G.lastTrick=null;
   // mark incoming cards for glow
   giftedIds=new Set(incomingGift.map(c=>c.id));
   setStatus();render();
@@ -1070,6 +1075,14 @@ function cardEl(card,opts={}){
     <div class="cnum">${l}</div>
     <div class="csym">${sym}</div>
     <span class="corner br">${corner}</span>
+  </div>`;
+}
+
+function lastTrickHTML(){
+  const trick=Array.isArray(G.lastTrick)?G.lastTrick:[];
+  if(!trick.length)return '';
+  return `<div class="last-trick-preview" aria-label="Last trick">
+    ${trick.map(t=>`<div class="last-trick-card">${cardEl(t.card)}</div>`).join('')}
   </div>`;
 }
 
@@ -1166,6 +1179,7 @@ function buildHTML(){
   return `
 <button class="back-arrow" onclick="backToMenu()" aria-label="Back to menu">&lsaquo;</button>
 <div id="table-wrap">
+  ${lastTrickHTML()}
 
   <!-- TOP: seat opposite me -->
   <div class="tz-top2">
@@ -1792,7 +1806,7 @@ function newRound(){
   const deck=shuffle(buildDeck());const hands=[[],[],[],[]];
   deck.forEach((c,i)=>hands[i%4].push(c));
   G.hands=hands.map(sortHand);G.phase='shuffling';G.gifts=[null,null,null,null];G.table=[];
-  G.leadColor=null;G.selected=[];G.statusMsg=`Choose 3 cards to gift to ${pname(1)}`;G.botThought='';G.playedCards=[];G.knownGiftedLees=[];G.modal=null;G.roundPts=[0,0,0,0];
+  G.leadColor=null;G.selected=[];G.statusMsg=`Choose 3 cards to gift to ${pname(1)}`;G.botThought='';G.playedCards=[];G.knownGiftedLees=[];G.lastTrick=null;G.modal=null;G.roundPts=[0,0,0,0];
   resolving=false;giftedIds=new Set();stopTimer();render();
   ANIM.shuffleAndDeal(()=>{ G.phase='gift'; render(); });
 }

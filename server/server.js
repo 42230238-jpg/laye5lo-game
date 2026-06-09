@@ -155,6 +155,7 @@ function dealGame(playerNames) {
     botThought: '',
     playedCards: [],
     knownGiftedLees: [],
+    lastTrick: null,
     modal: null
   };
 }
@@ -244,7 +245,7 @@ function botCardArba(game,pid) {
   return winners[0]||[...lg].sort((a,b)=>ARBA_RV[a.rank]-ARBA_RV[b.rank])[0];
 }
 function newArbaGame(names, scores=[0,0,0,0], round=1) {
-  return { names, phase:'bidding', hands:dealArbaHands(), bids:[null,null,null,null], bidIdx:0, trick:[], led:null, wins:[0,0,0,0], scores, cur:0, round, busy:false, winner:null };
+  return { names, phase:'bidding', hands:dealArbaHands(), bids:[null,null,null,null], bidIdx:0, trick:[], led:null, wins:[0,0,0,0], scores, cur:0, round, busy:false, winner:null, lastTrick:null };
 }
 function broadcastArba(roomCode) {
   const room=rooms[roomCode];
@@ -283,6 +284,7 @@ function playArbaCard(roomCode,pid,cardId) {
   game.wins[wi]++; game.cur=wi; game.busy=true; broadcastArba(roomCode);
   setTimeout(()=>{
     const r=rooms[roomCode], g=r&&r.arbaGame; if(!g)return;
+    g.lastTrick=g.trick.map(t=>({pid:t.pid,card:t.card}));
     g.trick=[]; g.led=null; g.busy=false;
     if(g.hands.every(h=>h.length===0)){
       for(let i=0;i<4;i++)g.scores[i]+=pointsArba(g.bids[i],g.wins[i]);
@@ -475,6 +477,7 @@ io.on("connection", (socket) => {
       game.currentPlayer = 0;
       game.leadColor = null;
       game.table = [];
+      game.lastTrick = null;
       game.selected = [];
       game.trickComplete = false;
       game.statusMsg = `${game.playerNames[0]}'s turn`;
@@ -609,6 +612,7 @@ function playCardForSeat(roomCode, seatIndex, cardId) {
       g.receivedGiftCardIdsBySeat = null;  // no longer needed after trick
 
       const tableCards = [...g.table];
+      g.lastTrick = tableCards.map(t => ({ pi: t.pi, card: t.card }));
       g.table = [];
       g.leadColor = null;
 
@@ -735,6 +739,7 @@ function scheduleBotPlay(roomCode) {
       botThought: '',
       playedCards: [],
       knownGiftedLees: [],
+      lastTrick: null,
       modal: null,
       trickResolving: false,
       receivedGiftCardIdsBySeat: null,
