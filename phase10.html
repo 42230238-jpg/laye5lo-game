@@ -1,0 +1,2131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phase 10</title>
+<style>
+/* ── CSS CUSTOM PROPERTIES (responsive base) ───────────── */
+:root{
+  --card-w:54px;--card-h:82px;
+  --card-fs:18px;--card-num-fs:20px;--card-sym-fs:9px;
+  --hand-h:92px;
+  --table-size:220px;
+  --avatar-sz:42px;
+  --side-col:72px;--top-row:116px;--btm-row:200px;
+  --mini-bw:22px;--mini-bh:34px;
+  --mini-vw:28px;--mini-vh:20px;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+/* Body must have a definite height so #game can fill it */
+html{
+  width:100%;
+  height:100%;
+  height:100dvh;
+}
+body{
+  width:100%;
+  height:100%;
+  background:transparent;
+  font-family:'Segoe UI',system-ui,sans-serif;
+  overflow:hidden; /* prevent page scroll — the game is self-contained */
+}
+h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+/* ── GAME SHELL ──
+   Uses height (not just min-height) so it always fills the viewport exactly.
+   No max-height cap → no white gap below on tall portrait phones. */
+#game{
+  width:100%;
+  height:100dvh;      /* fill full dynamic viewport height */
+  min-height:480px;   /* hard floor for very small/landscape screens */
+  background:radial-gradient(ellipse at center,#1a6b3a 0%,#0f4a26 55%,#0a3019 100%);
+  border-radius:16px;
+  position:relative;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;  /* children fill full width */
+  justify-content:flex-start;
+  padding:10px 8px 8px;
+  box-shadow:inset 0 0 60px rgba(0,0,0,0.5);
+  user-select:none;
+}
+
+/* felt texture lines */
+#game::before{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.012) 0px,rgba(255,255,255,0.012) 1px,transparent 1px,transparent 8px);
+  pointer-events:none;
+}
+/* oval table rim */
+#game::after{
+  content:'';position:absolute;
+  top:8px;left:8px;right:8px;bottom:8px;
+  border-radius:50%;
+  border:3px solid rgba(255,255,255,0.08);
+  pointer-events:none;
+}
+
+/* ── ROOT RENDER TARGET ──
+   This is the div that render() writes into.
+   flex:1 + min-height:0 lets it grow to fill #game,
+   which lets #table-wrap (also flex:1) fill it. */
+#root{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  width:100%;
+}
+
+/* ── CARD ── */
+.card{
+  position:relative;
+  width:var(--card-w);height:var(--card-h);
+  border-radius:9px;
+  display:inline-flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  font-weight:700;font-size:var(--card-fs);
+  border:none;
+  cursor:pointer;
+  flex-shrink:0;
+  box-shadow:2px 4px 10px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.35);
+  transition:transform 0.18s ease,box-shadow 0.18s ease;
+  outline:none;
+}
+.card::before{
+  content:'';position:absolute;inset:2px;border-radius:7px;
+  border:1.5px solid rgba(255,255,255,0.28);pointer-events:none;
+}
+.card .cnum{font-size:var(--card-num-fs);font-weight:800;line-height:1;color:inherit}
+.card .csym{font-size:var(--card-sym-fs);opacity:0.75;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.card .ptag{position:absolute;top:3px;right:4px;font-size:8px;font-weight:700;
+  background:rgba(0,0,0,0.35);border-radius:3px;padding:1px 3px;color:#fff}
+.card .corner{position:absolute;font-size:calc(var(--card-fs)*0.56);font-weight:800;line-height:1}
+.card .corner.tl{top:4px;left:5px}
+.card .corner.br{bottom:4px;right:5px;transform:rotate(180deg)}
+
+/* ── DECK-MODE CARD OVERRIDES ────────────────────────────────
+   Real playing-card look: white background, suit determines text color.
+   ♥ Hearts  (red cards)  = was UNO red    (.cr)
+   ♦ Diamonds(red cards)  = was UNO yellow (.cy)
+   ♣ Clubs   (black cards)= was UNO green  (.cg)
+   ♠ Spades  (black cards)= was UNO blue   (.cb)
+   Rank map: 1→A  0→10  draw2→Q  reverse→J  skip→K  (2-9 unchanged)
+   ───────────────────────────────────────────────────────── */
+
+/* White card base */
+.card.deck-mode,
+.fly-card.deck-mode{
+  background:#fff;
+  box-shadow:1px 3px 10px rgba(0,0,0,0.22),0 0 0 1px rgba(0,0,0,0.10);
+}
+/* Inner border: subtle gray instead of white-on-white */
+.card.deck-mode::before{
+  border-color:rgba(0,0,0,0.08);
+}
+
+/* ── Red suits: Hearts (.cr) and Diamonds (.cy) ── */
+.card.deck-mode.cr,
+.card.deck-mode.cy,
+.fly-card.deck-mode.cr,
+.fly-card.deck-mode.cy{
+  background:#fff;
+  color:#c8102e;
+}
+/* ── Black suits: Clubs (.cg) and Spades (.cb) ── */
+.card.deck-mode.cg,
+.card.deck-mode.cb,
+.fly-card.deck-mode.cg,
+.fly-card.deck-mode.cb{
+  background:#fff;
+  color:#111;
+}
+
+/* Center suit symbol — large and fully opaque, inherits red/black */
+.card.deck-mode .csym{
+  font-size:var(--card-num-fs);
+  opacity:1;
+  text-transform:none;
+  letter-spacing:0;
+  margin-top:1px;
+}
+/* Corner: rank above, suit symbol below — stacked like a real card */
+.card.deck-mode .corner{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:0;
+  line-height:1;
+}
+.card.deck-mode .corner .dk-s{
+  font-size:0.78em;
+  font-weight:700;
+  line-height:1.15;
+  text-transform:none;
+  letter-spacing:0;
+}
+/* Point-value badge — light bg so it shows on white */
+.card.deck-mode .ptag{
+  background:rgba(0,0,0,0.10);
+  color:inherit;
+}
+/* Playable hover ring — dark outline works on white */
+.card.deck-mode.playable:hover{
+  box-shadow:0 0 0 2px rgba(0,0,0,0.35),2px 6px 14px rgba(0,0,0,0.20);
+}
+/* Fly-card suit label */
+.fly-card.deck-mode .fly-sym{
+  font-size:var(--card-sym-fs);
+  opacity:1;
+  text-transform:none;
+  letter-spacing:0;
+}
+
+/* colors */
+.cr{background:linear-gradient(160deg,#ff4444 0%,#cc1111 100%);color:#fff}
+.cb{background:linear-gradient(160deg,#3388ff 0%,#1155cc 100%);color:#fff}
+.cg{background:linear-gradient(160deg,#22cc55 0%,#0f8830 100%);color:#fff}
+.cy{background:linear-gradient(160deg,#ffd000 0%,#c89000 100%);color:#1a1200}
+.cback{background:linear-gradient(135deg,#1a3a6b 0%,#0e2248 100%);
+  box-shadow:2px 4px 8px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.15)}
+
+/* back pattern */
+.cback::after{
+  content:'';position:absolute;inset:4px;border-radius:5px;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px),
+             repeating-linear-gradient(-45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px);
+  border:1px solid rgba(255,255,255,0.1);
+}
+
+.card.selected{transform:translateY(calc(var(--card-h)*-0.22))!important;box-shadow:0 0 0 3px #ffe066,2px 4px 16px rgba(0,0,0,0.6)!important}
+.card.unplayable{opacity:0.3;cursor:not-allowed;pointer-events:none}
+.card.playable:hover{transform:translateY(calc(var(--card-h)*-0.15));box-shadow:0 0 0 2px rgba(255,255,255,0.5),2px 6px 16px rgba(0,0,0,0.6)}
+.card.offsuit{box-shadow:0 0 0 2px #f59e0b,2px 4px 10px rgba(0,0,0,0.55)}
+
+.fx-card{
+  position:fixed;z-index:9999;pointer-events:none;
+  transition:transform .42s cubic-bezier(.25,.85,.25,1),opacity .42s ease;
+  will-change:transform,opacity;
+}
+.skip-picker{
+  position:absolute;inset:0;z-index:70;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,0.58);border-radius:16px;
+}
+.skip-box{
+  width:min(300px,calc(100% - 32px));padding:18px;border-radius:14px;
+  background:linear-gradient(160deg,#1a3a1a,#0e240e);
+  border:1px solid rgba(255,255,255,0.16);box-shadow:0 12px 34px rgba(0,0,0,0.72);
+  display:flex;flex-direction:column;gap:10px;align-items:center;
+}
+.skip-box h3{color:#ffe066;font-size:16px;font-weight:900}
+.skip-targets{display:grid;grid-template-columns:1fr;gap:7px;width:100%}
+.skip-pop{
+  position:absolute;left:50%;top:-12px;transform:translate(-50%,-50%);
+  z-index:20;padding:4px 10px;border-radius:12px;
+  background:rgba(220,38,38,0.92);color:#fff;font-size:10px;font-weight:1000;
+  box-shadow:0 6px 18px rgba(0,0,0,0.45);
+  animation:skip-bump .9s ease both;
+}
+@keyframes skip-bump{
+  0%{opacity:0;transform:translate(-50%,0) scale(.72)}
+  30%{opacity:1;transform:translate(-50%,-54%) scale(1.16)}
+  100%{opacity:0;transform:translate(-50%,-120%) scale(.92)}
+}
+.avatar.skipped{border-color:#ef4444;box-shadow:0 0 18px rgba(239,68,68,.92)}
+.laid-board{
+  width:min(620px,96%);
+  max-height:190px;
+  overflow-y:auto;
+  display:grid;
+  grid-template-columns:1fr;
+  gap:5px;
+  align-items:center;
+  padding:2px 4px;
+}
+.laid-row{
+  max-width:100%;
+  display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;justify-content:center;
+  background:rgba(34,238,102,0.08);border:1px solid rgba(34,238,102,0.24);
+  border-radius:8px;padding:4px 6px;
+}
+.laid-owner{
+  color:#22ee66;font-size:8px;font-weight:900;line-height:1.2;
+  min-width:38px;text-align:right;padding-top:3px;
+}
+.laid-group{
+  display:flex;gap:2px;flex-wrap:wrap;align-items:center;
+  border-left:1px solid rgba(255,255,255,0.12);padding-left:5px;
+}
+.laid-group-label{font-size:7px;color:rgba(255,255,255,.45);font-weight:800;align-self:center}
+.seat-laid{
+  display:flex;gap:3px;flex-wrap:wrap;align-items:center;justify-content:center;
+  max-width:min(260px,100%);padding:3px 4px;border-radius:7px;
+  background:rgba(34,238,102,0.08);border:1px solid rgba(34,238,102,0.22);
+}
+.seat-laid-title{font-size:7px;color:#22ee66;font-weight:900;width:100%;text-align:center}
+.seat-laid-group{display:flex;gap:2px;align-items:center;justify-content:center;flex-wrap:wrap}
+.tz-left .seat-laid,.tz-right .seat-laid{
+  max-width:92px;flex-direction:column;flex-wrap:nowrap;overflow:visible;
+}
+.tz-left .seat-laid-group,.tz-right .seat-laid-group{
+  max-width:86px;display:grid;grid-template-columns:repeat(2,32px);gap:2px;justify-content:center;
+}
+.tz-left .seat-laid{align-self:flex-end;margin-right:-52px;order:5}
+.tz-right .seat-laid{align-self:flex-start;margin-left:-52px;order:3}
+.tz-right .side-cards{order:4}
+.tz-left .side-cards{order:4}
+
+/* Phase 10 card faces */
+.card.phase-card{
+  --phase-color:#e51b23;
+  --phase-ink:var(--phase-color);
+  background:#f8f8f2;
+  color:var(--phase-ink);
+  border:2px solid #111;
+  border-radius:7px;
+  overflow:hidden;
+  box-shadow:2px 4px 10px rgba(0,0,0,0.55),inset 0 0 0 2px rgba(255,255,255,0.85);
+}
+.card.phase-card::before{display:none}
+.card.phase-card.cr{--phase-color:#e51b23}
+.card.phase-card.cb{--phase-color:#1476c9}
+.card.phase-card.cg{--phase-color:#119544}
+.card.phase-card.cy{--phase-color:#ead81f}
+.phase-band{
+  position:absolute;left:0;right:0;height:17px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 6px;background:var(--phase-color);color:#fff;
+  font-size:10px;font-weight:900;line-height:1;
+}
+.phase-card.cy .phase-band{color:#fff}
+.phase-band.top{top:0}
+.phase-band.bottom{bottom:0;transform:rotate(180deg)}
+.phase-main{
+  display:flex;align-items:center;justify-content:center;
+  width:100%;height:100%;padding-top:4px;
+  font-size:38px;font-weight:900;line-height:1;
+  color:var(--phase-color);letter-spacing:-1px;
+  text-shadow:0 1px 0 rgba(255,255,255,0.55);
+}
+.phase-main::after{
+  content:'';position:absolute;width:56%;height:3px;
+  left:22%;bottom:23px;background:var(--phase-color);border-radius:3px;
+}
+.phase-card.special{
+  background:#111;color:#fff;border-color:#f7f7f0;
+  box-shadow:2px 4px 10px rgba(0,0,0,0.6),inset 0 0 0 2px rgba(255,255,255,0.18);
+}
+.phase-card.special .phase-band{background:#111;color:#fff}
+.phase-special-stripes{
+  position:absolute;left:0;right:0;top:50%;height:31px;
+  transform:translateY(-50%);
+  background:linear-gradient(to bottom,#e51b23 0 25%,#1476c9 25% 50%,#119544 50% 75%,#ead81f 75% 100%);
+}
+.phase-special-label{
+  position:relative;z-index:1;
+  color:#fff;font-size:18px;font-weight:1000;font-style:italic;
+  letter-spacing:-1px;text-shadow:-1px -1px 0 #1476c9,1px 1px 0 #111;
+  transform:skew(-10deg);
+}
+.phase-card.mini-phase{
+  width:calc(var(--card-w)*0.7);height:calc(var(--card-h)*0.7);
+  border-radius:5px;border-width:1.5px;cursor:default;
+}
+.mini-phase .phase-band{height:12px;font-size:7px;padding:0 4px}
+.mini-phase .phase-main{font-size:24px}
+.mini-phase .phase-main::after{height:2px;bottom:16px}
+.mini-phase .phase-special-label{font-size:11px}
+.mini-phase .phase-special-stripes{height:21px}
+.card.tiny-phase{
+  width:32px;height:48px;border-radius:5px;border-width:1.5px;cursor:default;
+}
+.tiny-phase .phase-band{height:10px;font-size:6px;padding:0 3px}
+.tiny-phase .phase-main{font-size:20px}
+.tiny-phase .phase-main::after{height:2px;bottom:13px}
+.tiny-phase .phase-special-label{font-size:9px}
+.tiny-phase .phase-special-stripes{height:18px}
+
+/* ── PLAYER AREAS ── */
+.player-zone{display:flex;flex-direction:column;align-items:center;gap:4px;position:relative}
+.avatar{
+  width:var(--avatar-sz);height:var(--avatar-sz);
+  border-radius:50%;
+  background:linear-gradient(135deg,#2a5298,#1e3c72);
+  border:2.5px solid rgba(255,255,255,0.25);
+  display:flex;align-items:center;justify-content:center;
+  font-size:clamp(10px,2.5vw,13px);font-weight:700;color:#fff;
+  box-shadow:0 2px 8px rgba(0,0,0,0.5);
+  flex-shrink:0;
+}
+.avatar.active{border-color:#22ee66;box-shadow:0 0 12px rgba(34,238,102,0.7)}
+.pname{font-size:clamp(9px,2.2vw,11px);color:rgba(255,255,255,0.8);font-weight:500;text-shadow:0 1px 3px rgba(0,0,0,0.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pscore{font-size:clamp(9px,2vw,10px);color:rgba(255,220,100,0.9);font-weight:600}
+
+/* opponent rows */
+.opp-row{display:flex;align-items:center;gap:6px;width:100%}
+.opp-cards{display:flex;gap:-4px}
+.mini-back{
+  width:var(--mini-bw);height:var(--mini-bh);
+  border-radius:4px;flex-shrink:0;
+  background:linear-gradient(135deg,#1a3a6b,#0e2248);
+  border:1px solid rgba(255,255,255,0.15);
+  box-shadow:1px 2px 4px rgba(0,0,0,0.5);
+}
+
+/* ── TABLE CENTER ── */
+#table-center{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;width:100%;position:relative;
+}
+/* ── DIAMOND TABLE LAYOUT ── */
+.table-played{
+  position:relative;
+  width:var(--table-size);height:var(--table-size);
+  flex-shrink:0;
+}
+.table-played-empty{
+  font-size:12px;color:rgba(255,255,255,0.4);
+  display:flex;align-items:center;justify-content:center;
+  width:var(--table-size);height:var(--table-size);
+}
+.played-slot{
+  position:absolute;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+}
+.slot-bottom{ bottom:0;     left:50%; transform:translateX(-50%); }
+.slot-top   { top:0;        left:50%; transform:translateX(-50%); }
+.slot-left  { left:0;       top:50%;  transform:translateY(-50%); }
+.slot-right { right:0;      top:50%;  transform:translateY(-50%); }
+
+.played-name{
+  font-size:9px;color:rgba(255,255,255,0.7);font-weight:600;
+  text-shadow:0 1px 2px rgba(0,0,0,.9);
+  white-space:nowrap;order:-1;
+}
+.slot-bottom .played-name{ order:1; }
+
+.last-trick-preview{
+  position:absolute;
+  top:10px;
+  right:52px;
+  z-index:12;
+  display:grid;
+  grid-template-columns:repeat(2,24px);
+  gap:2px;
+  padding:3px;
+  border-radius:7px;
+  background:rgba(0,0,0,0.18);
+  border:1px solid rgba(255,255,255,0.08);
+  pointer-events:none;
+}
+.last-trick-card{
+  width:24px;
+  height:36px;
+}
+.last-trick-preview .card{
+  width:24px;
+  height:36px;
+  border-radius:4px;
+  font-size:8px;
+  box-shadow:1px 2px 5px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.28);
+  cursor:default;
+}
+.last-trick-preview .card::before{inset:1px;border-radius:3px;border-width:1px}
+.last-trick-preview .card .cnum{font-size:9px}
+.last-trick-preview .card .csym{font-size:5px;margin-top:1px;letter-spacing:0}
+.last-trick-preview .card .corner{font-size:5px}
+.last-trick-preview .card .corner.tl{top:2px;left:2px}
+.last-trick-preview .card .corner.br{bottom:2px;right:2px}
+.last-trick-preview .card .ptag{display:none}
+
+.table-card{transition:transform 0.25s;}
+
+.status-bar{
+  background:rgba(0,0,0,0.45);border-radius:20px;padding:5px 16px;
+  font-size:clamp(10px,2.5vw,12px);color:rgba(255,255,255,0.9);font-weight:500;
+  text-shadow:0 1px 2px rgba(0,0,0,.8);border:1px solid rgba(255,255,255,0.1);
+  min-width:min(200px,80%);text-align:center;
+}
+.lead-chip{
+  background:rgba(0,0,0,0.4);border-radius:12px;padding:3px 12px;
+  font-size:10px;color:rgba(255,220,100,0.9);font-weight:600;
+  border:1px solid rgba(255,220,100,0.3);
+}
+.thought-chip{
+  max-width:min(260px,90%);background:rgba(0,0,0,0.34);border-radius:12px;padding:4px 10px;
+  font-size:10px;line-height:1.35;color:rgba(255,255,255,0.72);font-weight:600;
+  border:1px solid rgba(255,255,255,0.08);text-align:center;
+}
+
+/* ── MY HAND ── */
+#my-hand-area{width:100%;display:flex;flex-direction:column;align-items:center;gap:6px}
+.my-info{display:flex;align-items:center;gap:8px;min-height:58px}
+.my-name-ring{
+  width:58px;height:58px;border-radius:50%;
+  position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.my-name-ring .pname,.my-name-ring .pscore{position:relative;z-index:1}
+.my-name-ring.timer-ring::before{
+  content:'';position:absolute;inset:0;border-radius:50%;z-index:0;
+  background:conic-gradient(var(--timer-color,rgb(40,200,40)) var(--timer-pct,100%),rgba(255,255,255,0.14) 0);
+}
+.my-name-ring.timer-ring::after{
+  content:'';position:absolute;inset:5px;border-radius:50%;z-index:0;
+  background:radial-gradient(ellipse at center,#1a6b3a 0%,#0f4a26 75%);
+  box-shadow:inset 0 0 8px rgba(0,0,0,0.45);
+}
+
+/* side opps */
+.side-opp{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px}
+.side-opp.left{left:4px;top:50%;transform:translateY(-50%)}
+.side-opp.right{right:4px;top:50%;transform:translateY(-50%)}
+.side-cards{display:flex;flex-direction:column;gap:-6px}
+.mini-back-v{
+  width:var(--mini-vw);height:var(--mini-vh);
+  border-radius:3px;margin-bottom:-7px;
+  background:linear-gradient(135deg,#1a3a6b,#0e2248);
+  border:1px solid rgba(255,255,255,0.15);
+  box-shadow:1px 2px 4px rgba(0,0,0,0.5);
+}
+
+/* ── BUTTONS ── */
+.chip-btn{
+  padding:6px 18px;border-radius:20px;
+  background:linear-gradient(135deg,#2a7d4f,#1a5c38);
+  color:#fff;font-size:12px;font-weight:600;
+  border:1.5px solid rgba(255,255,255,0.2);
+  cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);
+  transition:all 0.15s;
+}
+.chip-btn:hover{background:linear-gradient(135deg,#33a060,#228040);transform:scale(1.03)}
+.chip-btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.chip-btn.gold{background:linear-gradient(135deg,#c89000,#a07000);border-color:rgba(255,220,80,0.4)}
+.chip-btn.gold:hover{background:linear-gradient(135deg,#e0a800,#b88000)}
+
+/* ── MENUS ──
+   flex:1 makes every menu screen grow to fill #root, so the green
+   felt extends edge-to-edge on portrait phones. */
+.menu-screen{
+  flex:1;
+  width:100%;
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:28px;padding:28px 18px;text-align:center;
+  min-height:0; /* let flex control height, not a fixed minimum */
+  overflow-y:auto; /* allow scroll if content taller than screen */
+}
+.menu-mark{display:flex;flex-direction:column;align-items:center;gap:8px}
+.menu-mark h1,.room-panel h1{
+  color:#ffe066;font-size:clamp(26px,7vw,38px);font-weight:800;letter-spacing:0;
+  text-shadow:0 3px 12px rgba(0,0,0,0.75);
+}
+.menu-mark p,.room-panel p{
+  color:rgba(255,255,255,0.72);font-size:13px;font-weight:500;
+  text-shadow:0 1px 4px rgba(0,0,0,0.75);
+}
+.menu-card-stack{
+  width:138px;height:106px;position:relative;margin-bottom:4px;
+}
+.menu-card{
+  position:absolute;width:58px;height:86px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:21px;font-weight:900;color:#fff;
+  border:1.5px solid rgba(255,255,255,0.25);
+  box-shadow:2px 7px 18px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.35);
+}
+.menu-card::before{
+  content:'';position:absolute;inset:3px;border-radius:7px;
+  border:1px solid rgba(255,255,255,0.25);
+}
+.menu-card-red{left:6px;top:14px;transform:rotate(-15deg);background:linear-gradient(160deg,#ff4444,#cc1111)}
+.menu-card-blue{left:40px;top:2px;transform:rotate(0deg);background:linear-gradient(160deg,#3388ff,#1155cc)}
+.menu-card-gold{right:6px;top:14px;transform:rotate(15deg);background:linear-gradient(160deg,#ffd000,#c89000);color:#1a1200}
+.menu-actions,.room-actions{
+  display:flex;flex-direction:column;gap:10px;width:min(260px,88%);
+}
+.game-select-screen{gap:22px}
+.game-choice-grid{
+  width:min(340px,92%);
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+.game-choice-card{
+  width:100%;
+  min-height:86px;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:center;
+  gap:5px;
+  padding:14px 16px;
+  border-radius:14px;
+  border:1.5px solid rgba(255,255,255,0.16);
+  background:rgba(0,0,0,0.34);
+  color:#fff;
+  cursor:pointer;
+  box-shadow:0 8px 22px rgba(0,0,0,0.34);
+  text-align:left;
+  transition:transform 0.15s ease,background 0.15s ease,border-color 0.15s ease;
+}
+.game-choice-card:hover{
+  transform:translateY(-1px);
+  background:rgba(0,0,0,0.44);
+  border-color:rgba(255,224,102,0.36);
+}
+.game-choice-title{
+  color:#ffe066;
+  font-size:20px;
+  font-weight:900;
+  line-height:1;
+}
+.game-choice-copy{
+  color:rgba(255,255,255,0.72);
+  font-size:12px;
+  font-weight:600;
+  line-height:1.35;
+}
+.difficulty-box{
+  width:min(300px,90%);display:flex;flex-direction:column;gap:7px;
+  background:rgba(0,0,0,0.26);border:1px solid rgba(255,255,255,0.1);
+  border-radius:14px;padding:10px 12px;
+}
+.difficulty-label{
+  color:rgba(255,255,255,0.68);font-size:11px;font-weight:800;text-transform:uppercase;
+}
+.difficulty-options{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.difficulty-btn{
+  height:30px;border-radius:15px;border:1px solid rgba(255,255,255,0.14);
+  background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:900;
+  text-transform:capitalize;cursor:pointer;
+}
+.difficulty-btn:hover{background:rgba(255,255,255,0.14)}
+.difficulty-btn.active{
+  background:linear-gradient(135deg,#c89000,#9d6d00);
+  border-color:rgba(255,224,102,0.42);color:#fff;
+}
+.difficulty-note{
+  min-height:14px;color:rgba(255,255,255,0.62);font-size:10px;font-weight:700;
+}
+.menu-btn{
+  width:100%;height:42px;border-radius:22px;
+  background:linear-gradient(135deg,#2a7d4f,#1a5c38);
+  color:#fff;font-size:14px;font-weight:800;
+  border:1.5px solid rgba(255,255,255,0.2);
+  cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.38);
+  transition:transform 0.15s ease,background 0.15s ease,box-shadow 0.15s ease;
+}
+.menu-btn:hover{
+  transform:translateY(-1px);
+  background:linear-gradient(135deg,#33a060,#228040);
+  box-shadow:0 6px 18px rgba(0,0,0,0.45);
+}
+.menu-btn.primary{
+  background:linear-gradient(135deg,#c89000,#9d6d00);
+  border-color:rgba(255,224,102,0.42);
+}
+.menu-btn.primary:hover{background:linear-gradient(135deg,#e0a800,#b88000)}
+.menu-btn.subtle{background:rgba(0,0,0,0.35)}
+.menu-btn:disabled{opacity:0.45;cursor:not-allowed;transform:none}
+.room-screen{gap:16px}
+.room-panel{
+  width:min(320px,92%);display:flex;flex-direction:column;align-items:center;gap:12px;
+  background:rgba(0,0,0,0.38);border:1px solid rgba(255,255,255,0.12);
+  border-radius:14px;padding:24px 18px;box-shadow:0 10px 28px rgba(0,0,0,0.45);
+}
+.quick-panel{gap:16px}
+.quick-panel .difficulty-box{width:100%}
+.room-code{
+  width:190px;padding:10px 12px;border-radius:12px;
+  background:rgba(255,224,102,0.13);border:1px solid rgba(255,224,102,0.38);
+  color:#ffe066;font-size:24px;font-weight:900;letter-spacing:2px;
+  text-shadow:0 2px 8px rgba(0,0,0,0.65);text-align:center;
+}
+.room-input{
+  width:190px;padding:10px 12px;border-radius:12px;
+  background:rgba(0,0,0,0.28);border:1px solid rgba(255,255,255,0.18);
+  color:#ffe066;font-size:22px;font-weight:900;letter-spacing:2px;text-align:center;
+  outline:none;text-transform:uppercase;box-shadow:inset 0 1px 8px rgba(0,0,0,0.35);
+}
+.room-input:focus{border-color:rgba(255,224,102,0.52);box-shadow:0 0 0 3px rgba(255,224,102,0.12),inset 0 1px 8px rgba(0,0,0,0.35)}
+.room-input::placeholder{color:rgba(255,255,255,0.35)}
+.room-msg{
+  min-height:16px;color:rgba(255,255,255,0.72);font-size:11px;font-weight:600;
+  text-align:center;
+}
+.back-arrow{
+  position:absolute;top:16px;left:16px;z-index:20;
+  width:40px;height:40px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,0.42);border:1.5px solid rgba(255,255,255,0.18);
+  color:#ffe066;font-size:34px;line-height:1;font-weight:700;
+  cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.4);
+  transition:transform 0.15s ease,background 0.15s ease;
+}
+.back-arrow:hover{transform:translateX(-2px);background:rgba(0,0,0,0.58)}
+.lobby-screen{gap:14px;justify-content:center}
+.lobby-head{display:flex;flex-direction:column;align-items:center;gap:4px}
+.lobby-head h1{
+  color:#ffe066;font-size:28px;font-weight:800;letter-spacing:0;
+  text-shadow:0 3px 12px rgba(0,0,0,0.75);
+}
+.lobby-head p{
+  max-width:280px;color:rgba(255,255,255,0.72);font-size:12px;font-weight:500;
+  text-shadow:0 1px 4px rgba(0,0,0,0.75);
+}
+.seat-grid{
+  width:min(430px,94%);display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+.seat-wrap{display:flex;flex-direction:column;gap:4px}
+.seat-number{
+  color:#ffe066;font-size:11px;font-weight:900;text-transform:uppercase;
+  text-shadow:0 2px 8px rgba(0,0,0,0.7);
+}
+.seat-card{
+  min-height:126px;background:rgba(0,0,0,0.34);
+  border:1px solid rgba(255,255,255,0.12);border-radius:12px;
+  padding:10px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;
+  box-shadow:0 6px 18px rgba(0,0,0,0.32);
+}
+.seat-card.host{border-color:rgba(255,224,102,0.36)}
+.seat-card.bot{border-color:rgba(80,170,255,0.28)}
+.seat-card.empty{border-style:dashed;opacity:0.88}
+.seat-top{display:flex;align-items:center;gap:8px;text-align:left}
+.seat-avatar{
+  width:38px;height:38px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#2a5298,#1e3c72);
+  border:2px solid rgba(255,255,255,0.22);
+  color:#fff;font-size:12px;font-weight:800;flex-shrink:0;
+}
+.seat-card.empty .seat-avatar{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.55)}
+.seat-name{color:#fff;font-size:13px;font-weight:800}
+.seat-role{color:rgba(255,255,255,0.58);font-size:10px;font-weight:700;text-transform:uppercase}
+.seat-controls{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.seat-btn{
+  min-height:26px;border-radius:14px;background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.14);color:#fff;
+  font-size:10px;font-weight:800;cursor:pointer;
+}
+.seat-btn:hover{background:rgba(255,255,255,0.14)}
+.seat-btn.gold{background:rgba(255,224,102,0.18);border-color:rgba(255,224,102,0.35);color:#ffe066}
+.seat-btn.danger{background:rgba(255,80,80,0.16);border-color:rgba(255,80,80,0.28)}
+.seat-btn:disabled{opacity:0.35;cursor:not-allowed}
+
+/* ── MODAL ── */
+.modal-bg{position:absolute;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:50;border-radius:16px}
+.modal-box{
+  background:linear-gradient(160deg,#1a3a1a,#0e240e);border-radius:14px;padding:22px;
+  width:min(300px,calc(100% - 40px));
+  border:1px solid rgba(255,255,255,0.15);box-shadow:0 8px 32px rgba(0,0,0,0.8);
+  max-height:90%;overflow-y:auto;
+}
+.modal-box h3{color:#ffe066;font-size:16px;font-weight:700;margin-bottom:12px;text-align:center}
+.modal-rows{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.modal-row{background:rgba(255,255,255,0.07);border-radius:8px;padding:8px;text-align:center}
+.modal-row .mn{font-size:11px;color:rgba(255,255,255,0.6)}
+.modal-row .mv{font-size:15px;font-weight:700;color:#fff}
+.modal-row.danger .mv{color:#ff6666}
+.warn-chip{background:rgba(255,160,0,0.2);border:1px solid rgba(255,160,0,0.4);border-radius:10px;padding:4px 10px;font-size:10px;color:#ffb347;text-align:center}
+
+/* gifted glow */
+@keyframes giftGlow{
+  0%,100%{box-shadow:0 0 0 4px #ffe066,0 0 18px 6px rgba(255,224,102,0.7),2px 4px 10px rgba(0,0,0,0.55)}
+  50%{box-shadow:0 0 0 6px #fff,0 0 28px 10px rgba(255,224,102,0.9),2px 4px 10px rgba(0,0,0,0.55)}
+}
+.card.gifted{animation:giftGlow 0.8s ease-in-out infinite}
+
+/* turn timer ring */
+.timer-ring{--timer-pct:100%;--timer-color:rgb(40,200,40)}
+
+/* ── GAME TABLE GRID ──
+   flex:1 + min-height:0 makes it grow to fill #root (which fills #game).
+   Removed the old clamp(…600px) cap that caused the layout to stop halfway. */
+#table-wrap{
+  width:100%;
+  flex:1;
+  min-height:0;
+  position:relative;
+  display:grid;
+  grid-template-rows:var(--top-row) 1fr var(--btm-row);
+  grid-template-columns:var(--side-col) 1fr var(--side-col);
+  grid-template-areas:
+    "top2  top2  top2"
+    "left  mid   right"
+    "btm   btm   btm";
+  gap:4px;
+}
+.tz-top2  {grid-area:top2;display:flex;justify-content:center;align-items:flex-start;overflow:hidden}
+.tz-left  {grid-area:left;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px}
+.tz-mid   {grid-area:mid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:0}
+.tz-right {grid-area:right;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px}
+.tz-btm   {grid-area:btm;display:flex;flex-direction:column;align-items:center;
+            justify-content:flex-end;gap:4px;overflow:visible;padding-bottom:4px}
+
+/* Top opponent zone: sized to fit avatar + name + score + mini-backs */
+.tz-top2 .player-zone{height:calc(var(--top-row) - 4px);overflow:hidden}
+/* Side zones: let them fill their grid cell naturally */
+.tz-left .player-zone,.tz-right .player-zone{width:100%}
+
+/* Fixed height hand — cards are direct children; adjustHand() sets marginRight */
+#my-hand{
+  height:var(--hand-h);
+  width:100%;
+  overflow:visible;
+  display:flex;
+  justify-content:center;
+  align-items:flex-end;
+  flex-wrap:nowrap;
+  gap:0;
+  padding:0;
+}
+
+/* ── ANIMATIONS ─────────────────────────────────────────── */
+
+#anim-layer{
+  position:absolute;inset:0;z-index:100;
+  pointer-events:none;overflow:hidden;border-radius:16px;
+}
+
+/* ── SHUFFLE OVERLAY ── */
+#shuffle-overlay{
+  position:absolute;inset:0;z-index:200;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(10,48,25,0.88);border-radius:16px;
+  pointer-events:none;
+}
+#shuffle-deck{position:relative;width:60px;height:88px;}
+.sdeck-card{
+  position:absolute;inset:0;border-radius:9px;
+  background:linear-gradient(135deg,#1a3a6b 0%,#0e2248 100%);
+  border:1.5px solid rgba(255,255,255,0.2);
+  box-shadow:2px 4px 10px rgba(0,0,0,0.6);
+  will-change:transform,opacity;
+}
+.sdeck-card::after{
+  content:'';position:absolute;inset:4px;border-radius:5px;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px),
+             repeating-linear-gradient(-45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px);
+}
+#shuffle-label{
+  margin-top:16px;color:rgba(255,255,255,0.7);font-size:13px;font-weight:700;
+  letter-spacing:.5px;text-shadow:0 2px 6px rgba(0,0,0,.8);
+}
+@keyframes sdeal-top{
+  0%  {transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(0,-220px) rotate(-5deg);opacity:0}
+}
+@keyframes sdeal-right{
+  0%  {transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(220px,0) rotate(5deg);opacity:0}
+}
+@keyframes sdeal-bottom{
+  0%  {transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(0,220px) rotate(5deg);opacity:0}
+}
+@keyframes sdeal-left{
+  0%  {transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(-220px,0) rotate(-5deg);opacity:0}
+}
+@keyframes shuffle-left{
+  0%  {transform:translate(0,0) rotate(0deg)}
+  30% {transform:translate(-28px,-4px) rotate(-6deg)}
+  60% {transform:translate(0,0) rotate(0deg)}
+  100%{transform:translate(0,0) rotate(0deg)}
+}
+@keyframes shuffle-right{
+  0%  {transform:translate(0,0) rotate(0deg)}
+  30% {transform:translate(28px,4px) rotate(6deg)}
+  60% {transform:translate(0,0) rotate(0deg)}
+  100%{transform:translate(0,0) rotate(0deg)}
+}
+
+/* ── CARD-DROP FLYING CARD ── */
+.fly-card{
+  position:fixed;
+  width:var(--card-w);height:var(--card-h);
+  border-radius:9px;
+  font-weight:700;font-size:var(--card-fs);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  box-shadow:2px 4px 10px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,255,255,0.35);
+  pointer-events:none;z-index:9999;
+  will-change:left,top,opacity;
+}
+.fly-card.fly-active{opacity:1}
+.fly-card.fly-done{opacity:0;transition:opacity 0.12s ease}
+.fly-card .fly-label{font-size:var(--card-num-fs);font-weight:800;line-height:1;color:inherit}
+.fly-card .fly-sym{font-size:var(--card-sym-fs);opacity:0.75;margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.fly-card::before{
+  content:'';position:absolute;inset:2px;border-radius:7px;
+  border:1.5px solid rgba(255,255,255,0.28);pointer-events:none;
+}
+
+/* ── WIN BURST (golden ring at winner's spot after sweep) ── */
+@keyframes win-burst{
+  0%  {transform:scale(0.6);opacity:0.9}
+  60% {transform:scale(1.8);opacity:0.55}
+  100%{transform:scale(2.4);opacity:0}
+}
+.win-ring{
+  position:absolute;width:56px;height:56px;border-radius:50%;
+  border:3px solid #ffe066;pointer-events:none;z-index:260;
+  animation:win-burst 0.6s ease-out forwards;
+}
+
+/* ── TRICK SWEEP ── */
+.sweep-card{
+  position:fixed;
+  width:var(--card-w);height:var(--card-h);
+  border-radius:9px;
+  pointer-events:none;z-index:300;
+  will-change:transform,opacity;
+  transition:transform 0.45s cubic-bezier(.4,0,.6,1),opacity 0.45s ease;
+}
+.sweep-card.sweep-done{opacity:0;transform:scale(0.5)!important}
+
+/* ── DEAL CARD ── */
+.deal-card{
+  position:fixed;
+  width:40px;height:60px;border-radius:7px;
+  background:linear-gradient(135deg,#1a3a6b,#0e2248);
+  border:1.5px solid rgba(255,255,255,0.18);
+  box-shadow:2px 4px 12px rgba(0,0,0,0.65);
+  pointer-events:none;z-index:300;
+  will-change:transform,opacity;
+  transition:transform 0.4s cubic-bezier(.22,.68,.6,1.1),opacity 0.4s ease;
+}
+.deal-card::after{
+  content:'';position:absolute;inset:3px;border-radius:4px;
+  background:repeating-linear-gradient(45deg,rgba(255,255,255,0.07) 0,rgba(255,255,255,0.07) 2px,transparent 2px,transparent 8px);
+}
+.deal-card.deal-done{opacity:0}
+
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS — matches arba3meye exactly
+   ══════════════════════════════════════════════════════════ */
+
+/* Tablet / phablet (≤ 520 px wide) */
+@media (max-width:520px){
+  :root{
+    --card-w:50px;--card-h:76px;
+    --card-fs:16px;--card-num-fs:18px;--card-sym-fs:7px;
+    --hand-h:84px;
+    --table-size:184px;
+    --avatar-sz:36px;
+    --side-col:44px;--top-row:96px;--btm-row:180px;
+    --mini-bw:18px;--mini-bh:28px;
+    --mini-vw:20px;--mini-vh:14px;
+  }
+  #game{border-radius:0;min-height:0;padding:0}
+  #game::after{top:6px;left:6px;right:6px;bottom:6px}
+  .last-trick-preview{top:8px;right:46px;grid-template-columns:repeat(2,22px)}
+  .last-trick-card,.last-trick-preview .card{width:22px;height:33px}
+  #my-hand{justify-content:flex-start;padding:0 2px;width:100%}
+  .sweep-card{width:var(--card-w);height:var(--card-h)}
+}
+
+/* Small phones (≤ 380 px wide) — same threshold as arba3meye */
+@media (max-width:380px){
+  :root{
+    --card-w:46px;--card-h:70px;
+    --card-fs:15px;--card-num-fs:17px;--card-sym-fs:7px;
+    --hand-h:78px;
+    --table-size:170px;
+    --avatar-sz:32px;
+    --side-col:40px;--top-row:88px;--btm-row:168px;
+    --mini-bw:15px;--mini-bh:24px;
+    --mini-vw:18px;--mini-vh:13px;
+  }
+  .my-info{min-height:46px}
+  .my-name-ring{width:46px;height:46px}
+  .status-bar{padding:4px 10px}
+  .tz-mid{gap:5px}
+  .seat-grid{grid-template-columns:1fr}
+}
+
+/* Landscape / short screens (height ≤ 500 px) — matches arba3meye */
+@media (max-height:500px) and (orientation:landscape){
+  :root{
+    --card-w:40px;--card-h:61px;
+    --card-fs:14px;--card-num-fs:15px;--card-sym-fs:6px;
+    --hand-h:71px;
+    --table-size:148px;
+    --avatar-sz:30px;
+    --side-col:52px;--top-row:62px;--btm-row:116px;
+    --mini-bw:14px;--mini-bh:22px;
+    --mini-vw:18px;--mini-vh:12px;
+  }
+  #game{border-radius:0;min-height:0;padding:0}
+  #my-hand{justify-content:flex-start;padding:0 3px}
+  .tz-left,.tz-right{justify-content:center;padding-top:0}
+  .tz-mid{gap:3px;min-height:0}
+  .tz-btm{gap:2px;padding-bottom:3px}
+  .status-bar{font-size:10px;min-width:145px;padding:3px 10px}
+  .last-trick-preview{top:5px;right:44px;grid-template-columns:repeat(2,18px);gap:1px;padding:2px}
+  .last-trick-card,.last-trick-preview .card{width:18px;height:27px;border-radius:3px}
+  .last-trick-preview .card .cnum{font-size:7px}
+  .last-trick-preview .card .corner{font-size:4px}
+  .last-trick-preview .card .csym{font-size:4px}
+  .menu-screen{gap:14px;padding:16px 14px}
+  .menu-btn{height:34px;font-size:12px}
+  .sweep-card{width:var(--card-w);height:var(--card-h)}
+  .thought-chip{display:none}
+  .modal-bg{border-radius:0}
+}
+/* ── SETTINGS BUTTON & PANEL ── */
+#settings-wrap{position:absolute;top:10px;right:12px;z-index:200}
+.settings-btn{
+  width:32px;height:32px;border-radius:50%;
+  background:rgba(0,0,0,0.42);border:1px solid rgba(255,255,255,0.18);
+  color:rgba(255,255,255,0.82);font-size:15px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background 0.15s;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+}
+.settings-btn:hover{background:rgba(0,0,0,0.65)}
+.settings-panel{
+  position:absolute;top:38px;right:0;
+  background:rgba(8,24,14,0.97);
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:12px;padding:12px 14px;min-width:148px;
+  box-shadow:0 6px 24px rgba(0,0,0,0.65);
+}
+.settings-title{color:rgba(255,255,255,0.5);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.settings-opts{display:flex;gap:6px}
+.settings-opt{
+  flex:1;padding:6px 8px;border-radius:8px;
+  background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
+  color:rgba(255,255,255,0.65);font-size:12px;font-weight:600;cursor:pointer;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+  transition:all 0.12s;
+}
+.settings-opt:hover{background:rgba(255,255,255,0.13)}
+.settings-opt.on{background:rgba(255,224,102,0.18);border-color:rgba(255,224,102,0.42);color:#ffe066}
+
+
+/* ═══ PHASE 10 OVERRIDES ═══ */
+:root { --btm-row: 268px; }
+.tz-mid  { overflow-y: auto; gap: 4px; padding: 3px 4px; }
+.tz-btm  { overflow-y: auto; justify-content: flex-start; padding: 3px 4px 6px; gap: 3px; }
+.tz-left, .tz-right { overflow:hidden; }
+
+/* Back arrow button */
+.back-arrow {
+  position: absolute; top: 18px; left: 18px; z-index: 50;
+  background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.85); font-size: 22px; font-weight: 700;
+  width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1; padding: 0; transition: background .18s;
+}
+.back-arrow:hover { background: rgba(255,255,255,0.15); }
+
+/* Gold chip button variant */
+.chip-btn.gold {
+  background: linear-gradient(135deg,#ffd000,#c89000);
+  color: #1a1200; font-weight: 800; border-color: rgba(255,220,0,0.5);
+}
+.chip-btn.gold:hover { background: linear-gradient(135deg,#ffe033,#d4a000); }
+
+/* Subtle menu button */
+.menu-btn.subtle {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.65);
+}
+.menu-btn.subtle:hover { background: rgba(255,255,255,0.14); }
+
+/* Danger row in modals */
+.modal-row.danger { background: rgba(200,50,50,0.12); border-color: rgba(200,50,50,0.25); }
+
+/* Vertical mini cards for side opponents */
+.mini-back-v {
+  width: var(--mini-bh); height: var(--mini-bw);
+  border-radius: 4px;
+  background: linear-gradient(160deg,#2e4a2e,#1a2e1a);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 1px 1px 4px rgba(0,0,0,0.5);
+  flex-shrink: 0;
+}
+
+/* Rules screen scrollable */
+.menu-screen { overflow-y: auto; }
+
+</style>
+</head>
+<body>
+<div id="game"><div id="root"></div></div>
+<script>
+// ═══════════════════════════════════════════════════════
+//  PHASE 10  —  Full Game Logic
+// ═══════════════════════════════════════════════════════
+
+const PHASES = [
+  {id:1,  desc:'2 sets of 3',              reqs:[{t:'set',n:3},{t:'set',n:3}]},
+  {id:2,  desc:'1 set of 3 + 1 run of 4', reqs:[{t:'set',n:3},{t:'run',n:4}]},
+  {id:3,  desc:'1 set of 4 + 1 run of 4', reqs:[{t:'set',n:4},{t:'run',n:4}]},
+  {id:4,  desc:'1 run of 7',               reqs:[{t:'run',n:7}]},
+  {id:5,  desc:'1 run of 8',               reqs:[{t:'run',n:8}]},
+  {id:6,  desc:'1 run of 9',               reqs:[{t:'run',n:9}]},
+  {id:7,  desc:'2 sets of 4',              reqs:[{t:'set',n:4},{t:'set',n:4}]},
+  {id:8,  desc:'7 of one color',           reqs:[{t:'color',n:7}]},
+  {id:9,  desc:'1 set of 5 + 1 set of 2', reqs:[{t:'set',n:5},{t:'set',n:2}]},
+  {id:10, desc:'1 set of 5 + 1 set of 3', reqs:[{t:'set',n:5},{t:'set',n:3}]},
+];
+const COLS = ['cr','cb','cg','cy'];
+const SYM  = {cr:'♥',cb:'♠',cg:'♣',cy:'♦'};
+const BGCOL = {cr:'linear-gradient(160deg,#ff4444,#cc1111)',cb:'linear-gradient(160deg,#3388ff,#1155cc)',cg:'linear-gradient(160deg,#22cc55,#0f8830)',cy:'linear-gradient(160deg,#ffd000,#c89000)'};
+const TXTCOL= {cr:'#fff',cb:'#fff',cg:'#fff',cy:'#1a1200'};
+const COLOR_SORT = {cr:0,cb:1,cg:2,cy:3};
+
+let S = {};
+let _cid = 0;
+
+function initState(){
+  S={
+    screen:'menu',
+    players:[
+      mkP(0,'You',true,'🙂'),
+      mkP(1,'Alex',false,'🤖'),
+      mkP(2,'Sam',false,'👾'),
+      mkP(3,'Jordan',false,'🎯'),
+    ],
+    deck:[],discard:[],
+    cur:0,
+    tPhase:'draw',
+    sel:new Set(),
+    staging:[[],[]],
+    msg:'Welcome to Phase 10!',
+    round:1,
+    busy:false,
+    skipPick:null,
+    skipFx:null,
+    over:false,
+    winner:null,
+    roundResults:null,
+  };
+}
+function mkP(id,name,isHuman,emoji){
+  return{id,name,isHuman,emoji,hand:[],phase:0,laid:false,groups:[],score:0,skipMe:false};
+}
+
+// ── DECK ───────────────────────────────────────────────
+function createDeck(){
+  _cid=0;
+  const d=[];
+  for(let copy=0;copy<2;copy++)
+    for(const col of COLS)
+      for(let v=1;v<=12;v++)
+        d.push({id:_cid++,col,v,t:'num'});
+  for(let i=0;i<8;i++) d.push({id:_cid++,col:'cy',v:'W',t:'wild'});
+  for(let i=0;i<4;i++) d.push({id:_cid++,col:'cr',v:'S',t:'skip'});
+  return shuffle(d);
+}
+function shuffle(a){
+  a=[...a];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+function cardRank(c){return c.t==='wild'?'W':c.t==='skip'?'S':c.v;}
+function cardColorClass(c){return c.t==='wild'?'cy':c.t==='skip'?'cr':c.col;}
+function cardSortValue(c){return c.t==='num'?c.v:(c.t==='wild'?13:14);}
+function sortCards(cards){
+  return [...cards].sort((a,b)=>
+    cardSortValue(a)-cardSortValue(b) ||
+    (COLOR_SORT[cardColorClass(a)]??9)-(COLOR_SORT[cardColorClass(b)]??9) ||
+    a.id-b.id
+  );
+}
+function sortHand(player){player.hand=sortCards(player.hand);}
+function sortAllHands(){S.players.forEach(sortHand);}
+
+// ── GAME FLOW ──────────────────────────────────────────
+function startGame(){
+  initState();
+  S.screen='game';
+  startRound();
+}
+function startRound(){
+  S.deck=createDeck(); S.discard=[];
+  S.staging=[[],[]]; S.sel=new Set(); S.over=false;
+  for(const p of S.players){p.hand=[];p.laid=false;p.groups=[];p.skipMe=false;}
+  for(let i=0;i<10;i++) for(const p of S.players) p.hand.push(S.deck.pop());
+  sortAllHands();
+  // First discard cannot be skip
+  let top=S.deck.pop();
+  while(top.t==='skip'){S.deck.unshift(top);top=S.deck.pop();}
+  S.discard.push(top);
+  S.cur=0; S.tPhase='draw';
+  S.msg='Round '+S.round+' — Draw a card to start!';
+  render();
+}
+
+// ── HUMAN ACTIONS ──────────────────────────────────────
+function drawDeck(){
+  if(S.tPhase!=='draw'||S.cur!==0||S.over||S.busy)return;
+  if(!S.deck.length)reshuffleDiscard();
+  if(!S.deck.length)return;
+  const c=S.deck.pop();
+  S.busy=true;
+  animateCardToHand(c,'.cback',()=>{
+    S.players[0].hand.push(c);
+    sortHand(S.players[0]);
+    S.busy=false;
+    S.tPhase='action';
+    S.msg='Stage cards for your phase, then discard to end turn.';
+    render();adjustHand();
+  });
+}
+function drawDiscard(){
+  if(S.tPhase!=='draw'||S.cur!==0||S.over||S.busy)return;
+  if(!S.discard.length)return;
+  const c=S.discard.pop();
+  if(c.t==='skip'){S.discard.push(c);S.msg='⚠ Cannot draw a Skip from discard.';render();return;}
+  S.busy=true;
+  animateCardToHand(c,'.discard-card',()=>{
+    S.players[0].hand.push(c);
+    sortHand(S.players[0]);
+    S.busy=false;
+    S.tPhase='action';
+    S.msg='Took '+cardLbl(c)+' from discard. Stage your phase or discard to end turn.';
+    render();adjustHand();
+  });
+}
+function toggleSel(id){
+  if(S.tPhase!=='action'||S.cur!==0||S.over)return;
+  if(!S.players[0].hand.some(c=>c.id===id))return;
+  if(S.sel.has(id))S.sel.delete(id);else S.sel.add(id);
+  render();
+}
+function toStage(gi){
+  if(S.tPhase!=='action'||S.players[0].laid||S.over)return;
+  const ph=PHASES[S.players[0].phase];
+  if(gi>=ph.reqs.length)return;
+  const chosen=S.players[0].hand.filter(c=>S.sel.has(c.id)&&c.t!=='skip');
+  if(!chosen.length){S.msg='⚠ Skip cards cannot be used in phase groups.';render();return;}
+  S.staging[gi].push(...chosen);
+  const chosenIds=new Set(chosen.map(c=>c.id));
+  S.players[0].hand=S.players[0].hand.filter(c=>!chosenIds.has(c.id));
+  S.sel=new Set([...S.sel].filter(id=>!chosenIds.has(id)));
+  render();adjustHand();
+}
+function toStage(gi){
+  if(S.tPhase!=='action'||S.players[0].laid||S.over)return;
+  const ph=PHASES[S.players[0].phase];
+  if(gi>=ph.reqs.length)return;
+  const req=ph.reqs[gi];
+  const chosen=S.players[0].hand.filter(c=>S.sel.has(c.id)&&c.t!=='skip');
+  if(!chosen.length){S.msg='Skip cards cannot be used in phase groups.';render();return;}
+  const accepted=[];
+  const returned=[];
+  let test=[...(S.staging[gi]||[])];
+  for(const c of chosen){
+    const next=[...test,c];
+    if(canStillFitGroup(next,req)){
+      test=next;
+      accepted.push(c);
+    }else{
+      returned.push(c);
+    }
+  }
+  if(accepted.length){
+    S.staging[gi]=test;
+    const acceptedIds=new Set(accepted.map(c=>c.id));
+    S.players[0].hand=S.players[0].hand.filter(c=>!acceptedIds.has(c.id));
+  }
+  chosen.forEach(c=>S.sel.delete(c.id));
+  sortHand(S.players[0]);
+  S.msg=returned.length
+    ? `${returned.length} card${returned.length>1?'s':''} did not fit ${reqDesc(req)} and returned to your hand.`
+    : `Added ${accepted.length} card${accepted.length>1?'s':''} to ${reqDesc(req)}.`;
+  render();adjustHand();
+}
+function fromStage(gi,id){
+  const i=S.staging[gi].findIndex(c=>c.id===id);
+  if(i<0)return;
+  const[c]=S.staging[gi].splice(i,1);
+  S.players[0].hand.push(c);
+  sortHand(S.players[0]);
+  render();adjustHand();
+}
+function clearStage(){
+  for(let i=0;i<2;i++){S.players[0].hand.push(...S.staging[i]);S.staging[i]=[];}
+  sortHand(S.players[0]);
+  S.sel=new Set();
+  render();adjustHand();
+}
+function layDown(){
+  const me=S.players[0];
+  if(me.laid||S.over)return;
+  const ph=PHASES[me.phase];
+  const errs=ph.reqs.map((r,i)=>validateGroup(S.staging[i],r)?null:`Group ${i+1}: needs a valid ${reqDesc(r)}`).filter(Boolean);
+  if(errs.length){S.msg='❌ '+errs[0];render();return;}
+  me.laid=true;
+  me.groups=ph.reqs.map((_,i)=>[...S.staging[i]]);
+  S.staging=[[],[]];
+  S.msg='✅ Phase '+(me.phase+1)+' laid down! Discard a card to end your turn.';
+  render();
+}
+function addToGroup(pid,gi){
+  const me=S.players[0];
+  if(!me.laid){S.msg='Lay down your phase before adding cards to other groups.';render();return;}
+  const chosen=me.hand.filter(c=>S.sel.has(c.id));
+  if(!chosen.length)return;
+  const target=S.players[pid];
+  if(!target.laid||gi>=target.groups.length)return;
+  const req=PHASES[target.phase].reqs[gi];
+  let grp=[...target.groups[gi]];
+  const added=[];
+  for(const c of chosen){if(canAddTo(c,grp,req)){grp.push(c);added.push(c);}}
+  if(added.length){
+    target.groups[gi]=grp;
+    const addedIds=new Set(added.map(c=>c.id));
+    me.hand=me.hand.filter(c=>!addedIds.has(c.id));
+    added.forEach(c=>S.sel.delete(c.id));
+    S.msg='Added '+added.length+' card'+(added.length>1?'s':'')+' to '+(pid===0?'your':target.name+"'s")+' group '+(gi+1)+'!';
+  }else{S.msg='❌ Those cards can\'t be added there.';}
+  render();adjustHand();
+}
+function doDiscard(id){
+  if(S.tPhase!=='action'||S.cur!==0||S.over||S.busy)return;
+  const me=S.players[0];
+  const i=me.hand.findIndex(c=>c.id===id);
+  if(i<0)return;
+  if(me.hand[i].t==='skip'){S.skipPick=id;S.msg='Choose who to skip.';render();return;}
+  finishDiscard(id,null);
+}
+function chooseSkipTarget(pid){
+  if(S.cur!==0||S.skipPick==null)return;
+  finishDiscard(S.skipPick,pid);
+}
+function cancelSkipPick(){S.skipPick=null;render();}
+function finishDiscard(id,skipPid){
+  const me=S.players[S.cur];
+  const i=me.hand.findIndex(c=>c.id===id);
+  if(i<0)return;
+  const[c]=me.hand.splice(i,1);
+  S.sel=new Set();S.skipPick=null;S.busy=true;
+  animateCardToDiscard(c,()=>{
+    S.discard.push(c);
+    if(skipPid!=null){
+      S.players[skipPid].skipMe=true;
+      S.msg=S.players[skipPid].name+' will be skipped!';
+    }
+    S.busy=false;
+    if(me.hand.length===0){endRound(S.cur);return;}
+    doEndTurn();
+  });
+}
+function doEndTurn(){
+  S.cur=(S.cur+1)%4;
+  S.sel=new Set();
+  const curr=S.players[S.cur];
+  if(curr.skipMe){
+    curr.skipMe=false;
+    S.msg=curr.name+' is skipped!';
+    showSkip(curr.id,()=>{S.cur=(S.cur+1)%4;beginTurn();});
+    return;
+  }
+  beginTurn();
+}
+function beginTurn(){
+  const curr=S.players[S.cur];
+  S.tPhase='draw';
+  if(curr.isHuman){S.msg='Your turn — draw a card!';render();}
+  else{S.msg=curr.name+' is thinking...';render();setTimeout(aiTurn,1100);}
+}
+
+// ── AI LOGIC ───────────────────────────────────────────
+function aiTurn(){
+  const ai=S.players[S.cur];
+  if(ai.isHuman||S.over)return;
+  const myIdx=S.cur;
+  // Draw
+  const top=S.discard[S.discard.length-1];
+  if(top&&top.t!=='skip'&&usefulForPhase(top,ai)){
+    ai.hand.push(S.discard.pop());
+    sortHand(ai);
+    S.msg=ai.name+' took '+cardLbl(top)+' from discard.';
+  }else{
+    if(!S.deck.length)reshuffleDiscard();
+    if(S.deck.length){ai.hand.push(S.deck.pop());sortHand(ai);}
+    S.msg=ai.name+' drew from deck.';
+  }
+  render();
+  setTimeout(()=>{
+    if(S.cur!==myIdx)return;
+    // Lay down
+    if(!ai.laid){
+      const res=bestPhaseGroups(ai);
+      if(res){
+        ai.laid=true;ai.groups=res;
+        const used=new Set(res.flat().map(c=>c.id));
+        ai.hand=ai.hand.filter(c=>!used.has(c.id));
+        S.msg=ai.name+' laid down Phase '+(ai.phase+1)+'!';
+        render();
+      }
+    }
+    // Extend
+    if(ai.laid)aiExtend(ai);
+    // Discard
+    const di=worstCard(ai);
+    if(di>=0){
+      const[c]=ai.hand.splice(di,1);
+      S.discard.push(c);
+      if(c.t==='skip'){
+        const ni=chooseAiSkipTarget(ai.id);
+        S.players[ni].skipMe=true;
+        S.msg=ai.name+' discarded Skip — '+S.players[ni].name+' loses their turn!';
+      }else{S.msg=ai.name+' discarded '+cardLbl(c)+'.';}
+      render();
+    }
+    if(ai.hand.length===0){endRound(myIdx);return;}
+    S.cur=(S.cur+1)%4;
+    const next=S.players[S.cur];
+    if(next.skipMe){
+      next.skipMe=false;
+      S.msg=next.name+' is skipped!';
+      render();
+      setTimeout(()=>{S.cur=(S.cur+1)%4;beginTurn();},1100);
+      return;
+    }
+    beginTurn();
+  },1100);
+}
+function chooseAiSkipTarget(aiId){
+  const candidates=S.players.filter(p=>p.id!==aiId&&!p.skipMe);
+  const human=candidates.find(p=>p.isHuman);
+  if(human&&Math.random()<0.55)return human.id;
+  return candidates.sort((a,b)=>(b.phase-a.phase)||(a.score-b.score))[0]?.id ?? ((aiId+1)%4);
+}
+function aiTurn(){
+  const ai=S.players[S.cur];
+  if(ai.isHuman||S.over||S.busy)return;
+  const pid=S.cur;
+  const top=S.discard[S.discard.length-1];
+  const takeDiscard=top&&top.t!=='skip'&&usefulForPhase(top,ai);
+  if(!takeDiscard&&!S.deck.length)reshuffleDiscard();
+  const drawn=takeDiscard?top:S.deck[S.deck.length-1];
+  if(!drawn){beginTurn();return;}
+  S.msg=ai.name+(takeDiscard?' reaches for discard.':' draws from deck.');
+  S.busy=true;
+  render();
+  animateCardToPlayer(drawn,pid,takeDiscard?'.discard-card':'.cback',()=>{
+    if(takeDiscard){
+      ai.hand.push(S.discard.pop());
+      S.msg=ai.name+' took '+cardLbl(drawn)+' from discard.';
+    }else{
+      if(!S.deck.length)reshuffleDiscard();
+      if(S.deck.length)ai.hand.push(S.deck.pop());
+      S.msg=ai.name+' drew from deck.';
+    }
+    sortHand(ai);
+    S.busy=false;
+    render();
+    setTimeout(()=>aiActAfterDraw(pid),900);
+  },!takeDiscard);
+}
+function aiActAfterDraw(pid){
+  const ai=S.players[pid];
+  if(S.cur!==pid||ai.isHuman||S.over)return;
+  if(!ai.laid){
+    const res=bestPhaseGroups(ai);
+    if(res){
+      const used=new Set(res.flat().map(c=>c.id));
+      const laidCards=res.flat();
+      S.msg=ai.name+' lays down Phase '+(ai.phase+1)+'!';
+      S.busy=true;
+      render();
+      animateLaydown(pid,laidCards,()=>{
+        ai.laid=true;
+        ai.groups=res;
+        ai.hand=ai.hand.filter(c=>!used.has(c.id));
+        S.busy=false;
+        render();
+        setTimeout(()=>aiDiscardAndAdvance(pid),750);
+      });
+      return;
+    }
+  }
+  if(ai.laid)aiExtend(ai);
+  render();
+  setTimeout(()=>aiDiscardAndAdvance(pid),700);
+}
+function aiDiscardAndAdvance(pid){
+  const ai=S.players[pid];
+  if(S.cur!==pid||S.over)return;
+  const di=worstCard(ai);
+  if(di<0){advanceAfterTurn();return;}
+  const card=ai.hand[di];
+  S.msg=ai.name+' discards '+cardLbl(card)+'.';
+  S.busy=true;
+  render();
+  animatePlayerCardToDiscard(card,pid,()=>{
+    const idx=ai.hand.findIndex(c=>c.id===card.id);
+    if(idx>=0)ai.hand.splice(idx,1);
+    S.discard.push(card);
+    if(card.t==='skip'){
+      const target=chooseAiSkipTarget(pid);
+      S.players[target].skipMe=true;
+      S.msg=ai.name+' skipped '+S.players[target].name+'!';
+    }
+    S.busy=false;
+    render();
+    if(ai.hand.length===0){endRound(pid);return;}
+    setTimeout(advanceAfterTurn,850);
+  });
+}
+function advanceAfterTurn(){
+  S.cur=(S.cur+1)%4;
+  const next=S.players[S.cur];
+  if(next.skipMe){
+    next.skipMe=false;
+    S.msg=next.name+' is skipped!';
+    showSkip(next.id,()=>{S.cur=(S.cur+1)%4;beginTurn();});
+    return;
+  }
+  beginTurn();
+}
+function showSkip(pid,done){
+  S.skipFx=pid;
+  render();
+  setTimeout(()=>{S.skipFx=null;render();if(done)done();},900);
+}
+function usefulForPhase(card,player){
+  if(card.t==='wild')return true;
+  const ph=PHASES[player.phase];
+  const hand=[...player.hand,card];
+  for(const req of ph.reqs){
+    if(req.t==='set'&&hand.filter(c=>c.v===card.v||c.t==='wild').length>=req.n-1)return true;
+    if(req.t==='run'){
+      const nums=hand.filter(c=>c.t==='num').map(c=>c.v);
+      if(nums.includes(card.v-1)||nums.includes(card.v+1)||nums.includes(card.v-2)||nums.includes(card.v+2))return true;
+    }
+    if(req.t==='color'&&hand.filter(c=>(c.col===card.col&&c.t==='num')||c.t==='wild').length>=req.n-1)return true;
+  }
+  return false;
+}
+function bestPhaseGroups(player){
+  const ph=PHASES[player.phase];
+  if(ph.reqs.length===1){const g=findGroup(player.hand,ph.reqs[0]);return g?[g]:null;}
+  return split2(player.hand,ph.reqs[0],ph.reqs[1]);
+}
+function findGroup(cards,req){
+  const wilds=cards.filter(c=>c.t==='wild');
+  const nums=cards.filter(c=>c.t==='num');
+  const wc=wilds.length;
+  if(req.t==='set'){
+    const byV={};
+    for(const c of nums){byV[c.v]=byV[c.v]||[];byV[c.v].push(c);}
+    for(const v in byV){
+      const g=byV[v];const need=Math.max(0,req.n-g.length);
+      if(need<=wc)return[...g.slice(0,req.n-need),...wilds.slice(0,need)];
+    }
+    if(wc>=req.n)return wilds.slice(0,req.n);
+    return null;
+  }
+  if(req.t==='run'){
+    const sorted=[...nums].sort((a,b)=>a.v-b.v);
+    for(let start=1;start<=13-req.n;start++){
+      const inR=sorted.filter(c=>c.v>=start&&c.v<start+req.n);
+      const uniq=[],seen=new Set();
+      for(const c of inR)if(!seen.has(c.v)){seen.add(c.v);uniq.push(c);}
+      const gaps=req.n-uniq.length;
+      if(gaps<=wc){
+        const g=[...uniq];let wi=0;
+        for(let v=start;v<start+req.n;v++)if(!seen.has(v)&&wi<wc)g.push(wilds[wi++]);
+        if(g.length===req.n)return g;
+      }
+    }
+    if(wc>=req.n)return wilds.slice(0,req.n);
+    return null;
+  }
+  if(req.t==='color'){
+    const byC={};for(const col of COLS)byC[col]=[];
+    for(const c of nums)byC[c.col].push(c);
+    for(const col of COLS){
+      const g=byC[col];const need=Math.max(0,req.n-g.length);
+      if(need<=wc)return[...g.slice(0,req.n-need),...wilds.slice(0,need)];
+    }
+    if(wc>=req.n)return wilds.slice(0,req.n);
+    return null;
+  }
+  return null;
+}
+function split2(cards,req1,req2){
+  const g1=findGroup(cards,req1);
+  if(g1){
+    const used=new Set(g1.map(c=>c.id));
+    const rest=cards.filter(c=>!used.has(c.id));
+    const g2=findGroup(rest,req2);
+    if(g2)return[g1,g2];
+  }
+  const g2a=findGroup(cards,req2);
+  if(g2a){
+    const used=new Set(g2a.map(c=>c.id));
+    const rest=cards.filter(c=>!used.has(c.id));
+    const g1b=findGroup(rest,req1);
+    if(g1b)return[g1b,g2a];
+  }
+  return null;
+}
+function aiExtend(ai){
+  for(const target of S.players){
+    if(!target.laid||!target.groups.length)continue;
+    for(let gi=0;gi<target.groups.length;gi++){
+      const req=PHASES[target.phase].reqs[gi];
+      for(let ci=ai.hand.length-1;ci>=0;ci--)
+        if(canAddTo(ai.hand[ci],target.groups[gi],req))
+          target.groups[gi].push(ai.hand.splice(ci,1)[0]);
+    }
+  }
+}
+function canAddTo(card,group,req){
+  if(req.t==='set'){
+    const val=group.find(c=>c.t==='num')?.v;
+    return card.t==='wild'||card.v===val;
+  }
+  if(req.t==='run'){
+    if(card.t==='wild')return true;
+    const vals=group.filter(c=>c.t!=='wild').map(c=>c.v);
+    if(vals.includes(card.v))return false;
+    const all=[...vals,card.v].sort((a,b)=>a-b);
+    const wilds=group.filter(c=>c.t==='wild').length;
+    const range=all[all.length-1]-all[0]+1;
+    return range-all.length<=wilds&&all[0]>=1&&all[all.length-1]<=12;
+  }
+  if(req.t==='color'){
+    const col=group.find(c=>c.t!=='wild')?.col;
+    return card.t==='wild'||card.col===col;
+  }
+  return false;
+}
+function worstCard(ai){
+  const h=ai.hand;if(!h.length)return-1;
+  for(let i=0;i<h.length;i++)if(h[i].t==='skip')return i;
+  const ph=PHASES[ai.phase];
+  let worst=0,worstUse=Infinity;
+  for(let i=0;i<h.length;i++){
+    const c=h[i];if(c.t==='wild')continue;
+    let use=0;
+    for(const req of ph.reqs){
+      if(req.t==='set')use+=h.filter(x=>x.v===c.v||x.t==='wild').length;
+      if(req.t==='run'){const ns=h.filter(x=>x.t==='num').map(x=>x.v);if(ns.includes(c.v-1)||ns.includes(c.v+1))use+=2;}
+      if(req.t==='color')use+=h.filter(x=>(x.col===c.col&&x.t==='num')||x.t==='wild').length;
+    }
+    if(use<worstUse){worstUse=use;worst=i;}
+  }
+  return worst;
+}
+
+// ── VALIDATION ─────────────────────────────────────────
+function canStillFitGroup(cards,req){
+  if(!cards||cards.length>req.n)return false;
+  if(cards.some(c=>c.t==='skip'))return false;
+  const nums=cards.filter(c=>c.t==='num');
+  const wilds=cards.filter(c=>c.t==='wild').length;
+  if(req.t==='set'){
+    if(!nums.length)return true;
+    const val=nums[0].v;
+    return nums.every(c=>c.v===val);
+  }
+  if(req.t==='run'){
+    if(!nums.length)return true;
+    const vals=nums.map(c=>c.v).sort((a,b)=>a-b);
+    if(new Set(vals).size!==vals.length)return false;
+    const range=vals[vals.length-1]-vals[0]+1;
+    return range<=req.n&&nums.length+wilds<=req.n;
+  }
+  if(req.t==='color'){
+    if(!nums.length)return true;
+    const col=nums[0].col;
+    return nums.every(c=>c.col===col);
+  }
+  return false;
+}
+function validateGroup(cards,req){
+  if(!cards||cards.length!==req.n)return false;
+  const wilds=cards.filter(c=>c.t==='wild').length;
+  const nums=cards.filter(c=>c.t==='num');
+  if(req.t==='set'){
+    if(!nums.length)return true;
+    const val=nums[0].v;return nums.every(c=>c.v===val);
+  }
+  if(req.t==='run'){
+    if(!nums.length)return true;
+    const vals=nums.map(c=>c.v).sort((a,b)=>a-b);
+    if(new Set(vals).size!==vals.length)return false;
+    const range=vals[vals.length-1]-vals[0]+1;
+    return range-nums.length<=wilds&&range<=req.n;
+  }
+  if(req.t==='color'){
+    if(!nums.length)return true;
+    const col=nums[0].col;return nums.every(c=>c.col===col);
+  }
+  return false;
+}
+function cardPts(c){if(c.t==='wild')return 25;if(c.t==='skip')return 15;return c.v>=10?10:c.v;}
+function reqDesc(r){return r.t==='set'?'set of '+r.n:r.t==='run'?'run of '+r.n:r.n+' of one color';}
+function cardLbl(c){const sym=c.t==='wild'?'★':c.t==='skip'?'⊘':SYM[c.col];return c.v+''+sym;}
+
+// ── ROUND END ──────────────────────────────────────────
+function endRound(winIdx){
+  S.over=true;
+  // Score remaining hand + staging
+  for(const p of S.players)p.score+=p.hand.reduce((s,c)=>s+cardPts(c),0);
+  S.players[0].score+=S.staging.flat().reduce((s,c)=>s+cardPts(c),0);
+  S.staging=[[],[]];
+  const winner=S.players[winIdx];
+  // Game winner: went out on phase 10 with it laid down
+  if(winner.laid&&winner.phase===9){
+    S.winner=winner;S.screen='over';render();return;
+  }
+  // Save round results
+  S.roundResults=S.players.map(p=>({id:p.id,name:p.name,emoji:p.emoji,phase:p.phase,laid:p.laid,score:p.score}));
+  // Advance phases
+  for(const p of S.players)if(p.laid&&p.phase<9)p.phase++;
+  S.round++;S.screen='roundEnd';render();
+}
+function nextRound(){S.screen='game';startRound();}
+function backToMenu(){S.screen='menu';render();}
+function showRules(){S.screen='rules';render();}
+
+// ── HELPERS ────────────────────────────────────────────
+function reshuffleDiscard(){
+  if(S.discard.length<2)return;
+  const top=S.discard.pop();
+  S.deck=shuffle(S.discard);S.discard=[top];
+}
+function adjustHand(){
+  requestAnimationFrame(()=>{
+    const hand=document.getElementById('my-hand');if(!hand)return;
+    const cards=hand.querySelectorAll('.card');if(!cards.length)return;
+    const cw=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--card-w'))||54;
+    const avail=hand.clientWidth-6;
+    const total=cards.length*cw;
+    const mr=total>avail?Math.max(-40,(avail-total)/cards.length):3;
+    cards.forEach(c=>c.style.marginRight=mr+'px');
+  });
+}
+function rectCenter(rect){return{x:rect.left+rect.width/2,y:rect.top+rect.height/2};}
+function animateCardMove(card,fromEl,toEl,done,showBack=false){
+  const from=fromEl?.getBoundingClientRect();
+  const to=toEl?.getBoundingClientRect();
+  if(!from||!to){done&&done();return;}
+  const rootStyle=getComputedStyle(document.documentElement);
+  const cardW=parseInt(rootStyle.getPropertyValue('--card-w'))||54;
+  const cardH=parseInt(rootStyle.getPropertyValue('--card-h'))||82;
+  const ghost=document.createElement('div');
+  ghost.className='fx-card';
+  ghost.innerHTML=showBack
+    ? '<button class="card cback" style="cursor:default" aria-label="Face-down card"></button>'
+    : rCard(card,false,false,'style="cursor:default"');
+  const sx=from.left+from.width/2-cardW/2;
+  const sy=from.top+from.height/2-cardH/2;
+  ghost.style.left=sx+'px';
+  ghost.style.top=sy+'px';
+  ghost.style.width=cardW+'px';
+  ghost.style.height=cardH+'px';
+  document.body.appendChild(ghost);
+  const child=ghost.querySelector('.card');
+  if(child){child.style.width='100%';child.style.height='100%';}
+  const a={x:sx+cardW/2,y:sy+cardH/2},b=rectCenter(to);
+  requestAnimationFrame(()=>{
+    ghost.style.transform=`translate(${b.x-a.x}px,${b.y-a.y}px) scale(1)`;
+    ghost.style.opacity='0.94';
+  });
+  setTimeout(()=>{ghost.remove();done&&done();},460);
+}
+function animateCardToHand(card,fromSelector,done){
+  const from=document.querySelector(fromSelector)||document.querySelector('.cback');
+  const hand=document.getElementById('my-hand');
+  animateCardMove(card,from,hand||from,done);
+}
+function playerAnchor(pid){
+  if(pid===0)return document.getElementById('my-hand')||document.querySelector('[data-player-zone="0"]');
+  return document.querySelector(`[data-hand-pid="${pid}"]`)||document.querySelector(`[data-player-zone="${pid}"]`);
+}
+function animateCardToPlayer(card,pid,fromSelector,done,showBack=false){
+  const from=document.querySelector(fromSelector)||document.querySelector('.cback');
+  animateCardMove(card,from,playerAnchor(pid)||from,done,showBack);
+}
+function animateCardToDiscard(card,done){
+  const from=document.querySelector(`[data-cid="${card.id}"]`);
+  const to=document.querySelector('.discard-card')||document.querySelector('.cback')||from;
+  animateCardMove(card,from,to,done);
+}
+function animatePlayerCardToDiscard(card,pid,done){
+  const from=pid===0?document.querySelector(`[data-cid="${card.id}"]`):playerAnchor(pid);
+  const to=document.querySelector('.discard-card')||document.querySelector('.cback')||from;
+  animateCardMove(card,from,to,done);
+}
+function animateLaydown(pid,cards,done){
+  const from=playerAnchor(pid);
+  const to=document.querySelector(`[data-laid-pid="${pid}"]`)||document.querySelector(`[data-player-zone="${pid}"]`)||from;
+  const sample=cards.slice(0,Math.min(cards.length,4));
+  if(!sample.length){done&&done();return;}
+  let left=sample.length;
+  sample.forEach((card,i)=>setTimeout(()=>animateCardMove(card,from,to,()=>{left--;if(left===0&&done)done();}),i*90));
+}
+
+// ── RENDERING ──────────────────────────────────────────
+function render(){
+  const root=document.getElementById('root');
+  switch(S.screen){
+    case'menu':   root.innerHTML=rMenu();break;
+    case'game':   root.innerHTML=rGame();adjustHand();break;
+    case'roundEnd':root.innerHTML=rRoundEnd();break;
+    case'over':   root.innerHTML=rOver();break;
+    case'rules':  root.innerHTML=rRules();break;
+  }
+}
+
+function rCard(c,sel=false,active=false){
+  const v=c.v;
+  const sym=c.t==='wild'?'★':c.t==='skip'?'⊘':SYM[c.col];
+  const cc=c.t==='wild'?'cy':c.t==='skip'?'cr':c.col;
+  const cls=['card',cc];
+  if(sel)cls.push('selected');
+  else if(active)cls.push('playable');
+  const ev=active?`onclick="toggleSel(${c.id})"`:'';
+  return`<button class="${cls.join(' ')}" ${ev} data-cid="${c.id}" style="${!active&&!sel?'cursor:default':''}"><span class="corner tl">${v}</span><span class="cnum">${v}</span><span class="csym">${sym}</span><span class="corner br">${v}</span></button>`;
+}
+
+function rMini(c){
+  const bg=BGCOL[c.t==='wild'?'cy':c.t==='skip'?'cr':c.col];
+  const tc=TXTCOL[c.t==='wild'?'cy':c.t==='skip'?'cr':c.col];
+  return`<div style="width:calc(var(--card-w)*0.7);height:calc(var(--card-h)*0.7);border-radius:5px;background:${bg};color:${tc};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border:1px solid rgba(255,255,255,0.2);box-shadow:1px 2px 5px rgba(0,0,0,0.4);flex-shrink:0">${c.v}</div>`;
+}
+
+function phaseFace(c){
+  const v=cardRank(c);
+  if(c.t==='wild'||c.t==='skip'){
+    const label=c.t==='wild'?'WILD':'SKIP';
+    return`<span class="phase-band top"><b>${v}</b><b>${v}</b></span><span class="phase-special-stripes"></span><span class="phase-special-label">${label}</span><span class="phase-band bottom"><b>${v}</b><b>${v}</b></span>`;
+  }
+  return`<span class="phase-band top"><b>${v}</b><b>${v}</b></span><span class="phase-main">${v}</span><span class="phase-band bottom"><b>${v}</b><b>${v}</b></span>`;
+}
+
+function rCard(c,sel=false,active=false,attrs=null,mini=false){
+  const cc=cardColorClass(c);
+  const cls=['card','phase-card',cc];
+  if(c.t==='wild'||c.t==='skip')cls.push('special');
+  if(mini)cls.push('mini-phase');
+  if(sel)cls.push('selected');
+  else if(active)cls.push('playable');
+  const ev=attrs!==null?attrs:(active?`onclick="toggleSel(${c.id})"`:`style="cursor:default"`);
+  return`<button class="${cls.join(' ')}" ${ev} data-cid="${c.id}">${phaseFace(c)}</button>`;
+}
+
+function rMini(c){
+  return rCard(c,false,false,'style="cursor:default"',true);
+}
+
+function rTiny(c){
+  const cc=cardColorClass(c);
+  const cls=['card','phase-card','tiny-phase',cc];
+  if(c.t==='wild'||c.t==='skip')cls.push('special');
+  return`<button class="${cls.join(' ')}" style="cursor:default" data-cid="${c.id}">${phaseFace(c)}</button>`;
+}
+
+function rOppZone(p,horiz){
+  const ph=p.phase<10?`P${p.phase+1}`:'Done!';
+  const mini=Array(Math.min(p.hand.length,7)).fill(0).map(()=>`<div class="${horiz?'mini-back':'mini-back-v'}"></div>`).join('');
+  const laidBadge=p.laid?`<span style="font-size:8px;color:#22ee66;font-weight:800">✓ Laid</span>`:`<span style="font-size:8px;color:rgba(255,220,100,0.85);font-weight:700">${ph}</span>`;
+  const groupsHtml='';
+  return`<div class="player-zone"><div class="avatar ${S.cur===p.id&&!S.over?'active':''}" style="font-size:16px">${p.emoji}</div><div class="pname">${p.name}</div><div class="pscore">${p.score}pts</div>${laidBadge}<div class="${horiz?'opp-cards':'side-cards'}">${mini}</div>${groupsHtml}</div>`;
+}
+
+function rSeatLaid(p){
+  return'';
+  if(!p.laid||!p.groups.length)return'';
+  const cardView=(p.id===2||p.id===3)?rTiny:rMini;
+  return`<div class="seat-laid" data-laid-pid="${p.id}">
+    <div class="seat-laid-title">Laid</div>
+    ${p.groups.map((g,gi)=>`<div class="seat-laid-group"><span style="font-size:7px;color:rgba(255,255,255,.45);font-weight:800">G${gi+1}</span>${sortCards(g).map(c=>cardView(c)).join('')}</div>`).join('')}
+  </div>`;
+}
+function rOppZone(p,horiz){
+  const ph=p.phase<10?`P${p.phase+1}`:'Done!';
+  const mini=Array(Math.min(p.hand.length,7)).fill(0).map(()=>`<div class="${horiz?'mini-back':'mini-back-v'}"></div>`).join('');
+  const laidBadge=p.laid?`<span style="font-size:8px;color:#22ee66;font-weight:800">Laid</span>`:`<span style="font-size:8px;color:rgba(255,220,100,0.85);font-weight:700">${ph}</span>`;
+  return`<div class="player-zone" data-player-zone="${p.id}" style="position:relative">
+    ${S.skipFx===p.id?'<div class="skip-pop">SKIPPED</div>':''}
+    <div class="avatar ${S.cur===p.id&&!S.over?'active':''} ${S.skipFx===p.id?'skipped':''}" style="font-size:16px">${p.emoji}</div>
+    <div class="pname">${p.name}</div>
+    <div class="pscore">${p.score}pts</div>
+    ${laidBadge}
+    <div class="${horiz?'opp-cards':'side-cards'}" data-hand-pid="${p.id}">${mini}</div>
+    ${rSeatLaid(p)}
+  </div>`;
+}
+
+function rStaging(me){
+  if(me.laid){
+    return`<div style="font-size:9px;color:#22ee66;font-weight:800;letter-spacing:.3px">PHASE ${me.phase+1} LAID DOWN</div>`;
+  }
+}
+
+function rStagingOld(me){
+  if(me.laid){
+    return`<div style="display:flex;flex-direction:column;gap:3px;width:100%;align-items:center">
+      <div style="font-size:9px;color:#22ee66;font-weight:800;letter-spacing:.3px">✓ PHASE ${me.phase+1} LAID DOWN</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center">
+        ${me.groups.map((g,gi)=>`<div style="background:rgba(34,238,102,0.1);border:1px solid rgba(34,238,102,0.3);border-radius:7px;padding:4px 6px"><div style="font-size:7px;color:rgba(34,238,102,0.8);margin-bottom:2px;font-weight:700">G${gi+1}</div><div style="display:flex;gap:2px;flex-wrap:wrap">${sortCards(g).map(c=>rMini(c)).join('')}</div></div>`).join('')}
+      </div>
+    </div>`;
+  }
+  const ph=PHASES[me.phase];
+  const allValid=ph.reqs.every((r,i)=>validateGroup(S.staging[i],r));
+  const hasStaged=S.staging[0].length>0||S.staging[1].length>0;
+  return`<div style="display:flex;flex-direction:column;gap:4px;width:100%;align-items:center">
+    <div style="font-size:9px;color:#ffe066;font-weight:800">PHASE ${me.phase+1}: ${ph.desc.toUpperCase()}</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center">
+      ${ph.reqs.map((req,i)=>{
+        const g=S.staging[i]||[];
+        const filled=g.length===req.n;
+        const valid=filled&&validateGroup(g,req);
+        const bdr=filled?(valid?'rgba(34,238,102,0.55)':'rgba(255,80,80,0.55)'):'rgba(255,255,255,0.2)';
+        return`<div style="background:rgba(0,0,0,0.28);border:1.5px dashed ${bdr};border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:62px">
+          <div style="font-size:7.5px;color:rgba(255,255,255,0.55);font-weight:700">${reqDesc(req)} (${g.length}/${req.n})</div>
+          <div style="display:flex;gap:2px;flex-wrap:wrap;justify-content:center;min-height:32px;align-items:center">
+            ${sortCards(g).map(c=>`<div style="position:relative;display:inline-block">${rMini(c)}<button onclick="fromStage(${i},${c.id})" style="position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:#c0392b;color:#fff;border:none;font-size:7px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;z-index:5;line-height:1">×</button></div>`).join('')}
+            ${g.length===0?`<span style="font-size:8px;color:rgba(255,255,255,0.18)">empty</span>`:''}
+          </div>
+          ${S.sel.size>0?`<button class="chip-btn" style="font-size:8px;padding:2px 8px;margin-top:1px" onclick="toStage(${i})">+ Add</button>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center">
+      ${allValid?`<button class="chip-btn gold" style="font-size:10px;padding:5px 14px" onclick="layDown()">✓ Lay Down Phase ${me.phase+1}</button>`:''}
+      ${hasStaged?`<button class="chip-btn" style="background:rgba(180,50,50,0.55);font-size:10px;padding:5px 12px" onclick="clearStage()">↩ Return All</button>`:''}
+    </div>
+  </div>`;
+}
+
+function rStaging(me){
+  if(me.laid){
+    return`<div style="font-size:9px;color:#22ee66;font-weight:800;letter-spacing:.3px">PHASE ${me.phase+1} LAID DOWN</div>`;
+  }
+  return rStagingOld(me);
+}
+
+function rCenter(){
+  const top=S.discard[S.discard.length-1];
+  const isDraw=S.tPhase==='draw'&&S.cur===0&&!S.over;
+  const deckClick=isDraw?`onclick="drawDeck()" style="cursor:pointer"`:' style="cursor:default"';
+  const discClick=isDraw&&top&&top.t!=='skip'?`onclick="drawDiscard()" style="cursor:pointer"`:' style="cursor:default"';
+  const topCol=top?(top.t==='wild'?'cy':top.t==='skip'?'cr':top.col):'';
+  const topV=top?top.v:'';
+  const topSym=top?(top.t==='wild'?'★':top.t==='skip'?'⊘':SYM[top.col]):'';
+  return`<div style="display:flex;align-items:flex-end;justify-content:center;gap:14px">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+      <button class="card cback ${isDraw?'playable':''}" ${deckClick}>
+        <span class="cnum" style="font-size:9px;opacity:0.55;letter-spacing:0">×${S.deck.length}</span>
+      </button>
+      <span style="font-size:8px;color:rgba(255,255,255,0.38);font-weight:700;letter-spacing:.5px">DECK</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+      ${top?`<button class="card ${topCol} ${isDraw&&top.t!=='skip'?'playable':''}" ${discClick}>
+        <span class="corner tl">${topV}</span><span class="cnum">${topV}</span><span class="csym">${topSym}</span><span class="corner br">${topV}</span>
+      </button>`:
+      `<div class="card" style="background:rgba(255,255,255,0.05);border:1.5px dashed rgba(255,255,255,0.18)"></div>`}
+      <span style="font-size:8px;color:rgba(255,255,255,0.38);font-weight:700;letter-spacing:.5px">DISCARD</span>
+    </div>
+  </div>`;
+}
+
+function rCenter(){
+  const top=S.discard[S.discard.length-1];
+  const isDraw=S.tPhase==='draw'&&S.cur===0&&!S.over;
+  const deckClick=isDraw&&!S.busy?`onclick="drawDeck()" style="cursor:pointer"`:'style="cursor:default"';
+  const discAttrs=isDraw&&top&&top.t!=='skip'&&!S.busy?`onclick="drawDiscard()" style="cursor:pointer"`:'style="cursor:default"';
+  return`<div style="display:flex;align-items:flex-end;justify-content:center;gap:14px">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+      <button class="card cback ${isDraw&&!S.busy?'playable':''}" ${deckClick} aria-label="Deck">
+        <span class="cnum" style="font-size:9px;opacity:0.55;letter-spacing:0">x${S.deck.length}</span>
+      </button>
+      <span style="font-size:8px;color:rgba(255,255,255,0.38);font-weight:700;letter-spacing:.5px">DECK</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+      <div class="discard-card">${top?rCard(top,false,isDraw&&top.t!=='skip',discAttrs):`<div class="card" style="background:rgba(255,255,255,0.05);border:1.5px dashed rgba(255,255,255,0.18)"></div>`}</div>
+      <span style="font-size:8px;color:rgba(255,255,255,0.38);font-weight:700;letter-spacing:.5px">DISCARD</span>
+    </div>
+  </div>`;
+}
+
+function rAddBtns(me){
+  if(!me.laid||S.sel.size===0)return'';
+  const btns=S.players
+    .filter(p=>p.laid&&p.groups.length)
+    .flatMap(p=>p.groups.map((g,gi)=>`<button class="chip-btn" style="font-size:8px;padding:3px 9px" onclick="addToGroup(${p.id},${gi})">+→ ${p.id===0?'Your':p.name+"'s"} G${gi+1}</button>`));
+  return btns.length?`<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:1px">${btns.join('')}</div>`:'';
+}
+
+function rSkipPicker(){
+  if(S.skipPick==null)return'';
+  return`<div class="skip-picker">
+    <div class="skip-box">
+      <h3>Choose who to skip</h3>
+      <div class="skip-targets">
+        ${S.players.filter(p=>p.id!==0).map(p=>`<button class="menu-btn" style="height:36px;font-size:12px" onclick="chooseSkipTarget(${p.id})">${p.emoji} ${p.name}</button>`).join('')}
+      </div>
+      <button class="menu-btn subtle" style="height:32px;font-size:11px" onclick="cancelSkipPick()">Cancel</button>
+    </div>
+  </div>`;
+}
+function rLaidBoard(){
+  const laid=S.players.filter(p=>p.laid&&p.groups.length);
+  if(!laid.length)return'';
+  return`<div class="laid-board">
+    ${laid.map(p=>`<div class="laid-row">
+      <div class="laid-owner">${p.emoji}<br>${p.id===0?'You':p.name}</div>
+      ${p.groups.map((g,gi)=>`<div class="laid-group"><span class="laid-group-label">G${gi+1}</span>${sortCards(g).map(c=>rMini(c)).join('')}</div>`).join('')}
+    </div>`).join('')}
+  </div>`;
+}
+
+function rGame(){
+  const me=S.players[0];
+  const isMyTurn=S.cur===0&&!S.over;
+  const isAction=S.tPhase==='action';
+  const active=isMyTurn&&isAction;
+  const selInHand=me.hand.filter(c=>S.sel.has(c.id));
+  const canDiscard=active&&selInHand.length===1;
+
+  const phBar=`<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center">
+    ${S.players.map(p=>`<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:6px;background:${p.laid?'rgba(34,200,80,0.22)':'rgba(255,255,255,0.07)'};border:1px solid ${p.laid?'rgba(34,200,80,0.38)':'rgba(255,255,255,0.1)'};color:${S.cur===p.id?'#ffe066':p.laid?'#22ee66':'rgba(255,255,255,0.55)'}">${p.emoji} P${p.phase+1}${p.laid?'✓':''}</span>`).join('')}
+  </div>`;
+
+  return`${rSkipPicker()}<button class="back-arrow" onclick="backToMenu()" style="z-index:50">‹</button>
+  <div id="table-wrap">
+    <div class="tz-top2">${rOppZone(S.players[2],true)}</div>
+    <div class="tz-left">${rOppZone(S.players[1],false)}</div>
+    <div class="tz-mid">
+      <div class="status-bar">${S.msg}</div>
+      ${rCenter()}
+      ${phBar}
+      ${rLaidBoard()}
+      ${active?rStaging(me):(me.laid&&me.groups.length?rStaging(me):`<div style="font-size:9px;color:rgba(255,255,255,0.25);text-align:center;padding:4px 0">${S.cur!==0?S.players[S.cur].name+"'s turn…":S.tPhase==='draw'?'Draw a card above':''}</div>`)}
+    </div>
+    <div class="tz-right">${rOppZone(S.players[3],false)}</div>
+    <div class="tz-btm">
+      <div class="my-info" style="padding:0 4px;position:relative">
+        ${S.skipFx===0?'<div class="skip-pop">SKIPPED</div>':''}
+        <div class="my-name-ring">
+          <div class="avatar ${isMyTurn&&!S.over?'active':''} ${S.skipFx===0?'skipped':''}" style="width:100%;height:100%;font-size:20px;border-radius:50%">${me.emoji}</div>
+        </div>
+        <div>
+          <div class="pname" style="font-size:12px;font-weight:700">You • ${me.score}pts</div>
+          <div style="font-size:9px;color:#ffe066;font-weight:700">Phase ${me.phase+1}${me.phase<10?': '+PHASES[me.phase].desc:' ✓ All done!'}</div>
+        </div>
+      </div>
+      <div id="my-hand" data-hand-pid="0">${me.hand.map(c=>rCard(c,S.sel.has(c.id),active)).join('')}</div>
+      ${active?`<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;padding:2px 4px">
+        ${canDiscard?`<button class="chip-btn gold" style="font-size:10px" onclick="doDiscard(${selInHand[0].id})">Discard & End Turn</button>`:`<div class="status-bar" style="font-size:9px;padding:3px 12px;min-width:0">Select 1 card from hand to discard</div>`}
+      </div>
+      ${rAddBtns(me)}`:''}
+    </div>
+  </div>`;
+}
+
+function rMenu(){
+  return`<div class="menu-screen">
+    <div class="menu-mark">
+      <div class="menu-card-stack">
+        <div class="menu-card menu-card-red" style="font-size:26px">7</div>
+        <div class="menu-card menu-card-blue" style="font-size:16px;font-weight:900">P10</div>
+        <div class="menu-card menu-card-gold" style="font-size:24px;color:#1a1200">W</div>
+      </div>
+      <h1>Phase 10</h1>
+      <p>Complete all 10 phases before your opponents to win!</p>
+    </div>
+    <div class="menu-actions">
+      <button class="menu-btn primary" onclick="startGame()">▶ Play Now</button>
+      <button class="menu-btn" onclick="showRules()">📖 How to Play</button>
+    </div>
+  </div>`;
+}
+
+function rRules(){
+  const entries=[
+    ['🎯 Objective','Be the first player to complete all 10 Phases in order. Each round, draw cards, build your phase, lay it down, and empty your hand.'],
+    ['🃏 Your Turn','1. Draw a card from the deck or discard pile.\n2. Select cards and click "+ Add" to stage them for your phase groups.\n3. Click "✓ Lay Down Phase" when groups are valid.\n4. Add extra cards to any player\'s laid-down groups.\n5. Select 1 card from your hand and click "Discard & End Turn".'],
+    ['📋 The 10 Phases',PHASES.map((p,i)=>`Phase ${i+1}: ${p.desc}`).join('\n')],
+    ['🃏 Special Cards','Wild (W, 25pts): substitutes for any number in a phase group.\nSkip (S, 15pts): discard to make the next player lose their turn.'],
+    ['🏆 Winning','Complete Phase 10 and go out (empty your hand) first to win! If you can\'t complete your phase this round, you keep working on it next round.'],
+    ['📊 Scoring','Cards remaining in hand add penalty points:\n1–9 = face value · 10–12 = 10pts · Skip = 15pts · Wild = 25pts'],
+  ];
+  return`<div class="menu-screen" style="gap:10px;overflow-y:auto">
+    <button class="back-arrow" onclick="backToMenu()">‹</button>
+    <div class="menu-mark"><h1 style="font-size:22px">How to Play</h1></div>
+    <div style="width:min(360px,94%);display:flex;flex-direction:column;gap:7px">
+      ${entries.map(([t,b])=>`<div style="background:rgba(0,0,0,0.28);border:1px solid rgba(255,255,255,0.09);border-radius:10px;padding:11px 13px"><div style="color:#ffe066;font-size:11px;font-weight:800;margin-bottom:5px">${t}</div><div style="color:rgba(255,255,255,0.72);font-size:10.5px;line-height:1.55;white-space:pre-line">${b}</div></div>`).join('')}
+    </div>
+    <button class="menu-btn primary" style="width:160px;height:36px;font-size:13px" onclick="startGame()">▶ Play Now</button>
+  </div>`;
+}
+
+function rRoundEnd(){
+  const res=S.roundResults||S.players.map(p=>({...p,phase:p.phase,laid:false}));
+  const now=S.players;
+  return`<div class="menu-screen">
+    <div class="modal-box" style="width:min(370px,calc(100% - 20px))">
+      <h3>Round ${S.round-1} Over!</h3>
+      <div class="modal-rows">
+        ${res.map(r=>`<div class="modal-row ${r.laid?'':'danger'}">
+          <div class="mn">${r.emoji} ${r.name}</div>
+          <div class="mv" style="font-size:13px">${r.laid?'✓ Phase '+(r.phase+1)+' done':'✗ Phase '+(r.phase+1)+' failed'}</div>
+          <div class="mn" style="color:#ffe066;margin-top:3px">${r.score} total pts</div>
+        </div>`).join('')}
+      </div>
+      <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:8px;margin:8px 0;text-align:center">
+        <div style="font-size:9px;color:rgba(255,255,255,0.5);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Next Round — Working On</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
+          ${now.map(p=>`<span style="font-size:10px;color:#ffe066;font-weight:700">${p.emoji} P${p.phase+1}</span>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="menu-btn primary" style="max-width:150px;height:36px;font-size:13px" onclick="nextRound()">▶ Next Round</button>
+        <button class="menu-btn subtle" style="max-width:100px;height:36px;font-size:12px" onclick="backToMenu()">Menu</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function rOver(){
+  const w=S.winner;
+  const sorted=[...S.players].sort((a,b)=>a.score-b.score);
+  return`<div class="menu-screen">
+    <div class="menu-mark">
+      <div class="menu-card-stack"><div class="menu-card menu-card-gold" style="font-size:32px">🏆</div></div>
+      <h1>${w.isHuman?'You Win!':w.name+' Wins!'}</h1>
+      <p>${w.emoji} ${w.name} completed all 10 phases first!</p>
+    </div>
+    <div style="width:min(280px,90%);background:rgba(0,0,0,0.3);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,0.1)">
+      <div style="font-size:9px;color:rgba(255,255,255,0.45);text-align:center;margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Final Scores (lower = better)</div>
+      ${sorted.map((p,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-radius:7px;background:${i===0?'rgba(255,220,100,0.12)':'rgba(255,255,255,0.04)'};margin-bottom:4px">
+        <span style="color:#fff;font-size:12px;font-weight:600">${['🥇','🥈','🥉','4️⃣'][i]} ${p.emoji} ${p.name}</span>
+        <span style="color:#ffe066;font-weight:800;font-size:13px">${p.score}pts</span>
+      </div>`).join('')}
+    </div>
+    <div class="menu-actions">
+      <button class="menu-btn primary" onclick="startGame()">▶ Play Again</button>
+      <button class="menu-btn subtle" onclick="backToMenu()">Main Menu</button>
+    </div>
+  </div>`;
+}
+
+// ── INIT ───────────────────────────────────────────────
+initState();
+render();
+
+</script>
+</body>
+</html>

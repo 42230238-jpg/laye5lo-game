@@ -1515,9 +1515,13 @@ function buildGameSelectHTML(){
       <span class="game-choice-title">Arba3meye</span>
       <span class="game-choice-copy">Bid, take tricks, and race to the target.</span>
     </button>
-      <button class="game-choice-card" onclick="openUno()">
+    <button class="game-choice-card" onclick="openUno()">
     <span class="game-choice-title">UNO</span>
     <span class="game-choice-copy">Classic color-matching card game.</span>
+    </button>
+    <button class="game-choice-card" onclick="openPhase10()">
+      <span class="game-choice-title">Phase 10</span>
+      <span class="game-choice-copy">Build sets and runs through all 10 phases.</span>
     </button>
   </div>
 </div>`;
@@ -1708,6 +1712,7 @@ window.setBotDifficulty=function(level){botDifficulty=level;render();};
 window.openLee5aMenu=function(){stopTimer();G={phase:'menu',modal:null,roomCode:null,roomMsg:''};render();};
 window.openArba3meye=function(){stopTimer();window.location.href='arba3meye.html?v=3';};
 window.openUno=function(){stopTimer();window.location.href='uno.html';};
+window.openPhase10=function(){stopTimer();window.location.href='phase10.html';};
 window.backToGameSelect=function(){initMenu();};
 window.openQuickSetup=function(){stopTimer();G={phase:'quickSetup',modal:null};render();};
 window.quickPlay=function(){initGame();};

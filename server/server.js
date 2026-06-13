@@ -32,6 +32,7 @@ function serveHtml(candidates) {
 app.get("/uno.html",        serveHtml(["uno.html", "UNO.html"]));
 app.get("/UNO.html",        serveHtml(["uno.html", "UNO.html"]));
 app.get("/arba3meye.html",  serveHtml(["arba3meye.html"]));
+app.get("/phase10.html",    serveHtml(["phase10.html"]));
 app.get("/index.html",      serveHtml(["index.html"]));
 
 app.use(cors());
@@ -183,6 +184,146 @@ function roomPayload(roomCode) {
     hostId: room.hostId,
     seats: room.seats
   };
+}
+
+// ── UNO HELPERS ───────────────────────────────────────────
+const UNO_COLORS = ["red", "blue", "green", "yellow"];
+const UNO_COLOR_ORDER = { red: 0, blue: 1, green: 2, yellow: 3, wild: 4 };
+const UNO_TYPE_ORDER = { num: 0, skip: 10, reverse: 11, draw2: 12, wild: 13, wild4: 14 };
+
+function unoUid() {
+  return Math.random().toString(36).slice(2, 10);
+}
+function buildUnoDeck() {
+  const d = [];
+  for (const color of UNO_COLORS) {
+    d.push({ id: unoUid(), color, type: "num", value: "0" });
+    for (let i = 1; i <= 9; i++) {
+      d.push({ id: unoUid(), color, type: "num", value: String(i) });
+      d.push({ id: unoUid(), color, type: "num", value: String(i) });
+    }
+    for (const type of ["skip", "reverse", "draw2"]) {
+      d.push({ id: unoUid(), color, type, value: type });
+      d.push({ id: unoUid(), color, type, value: type });
+    }
+  }
+  for (let i = 0; i < 4; i++) {
+    d.push({ id: unoUid(), color: "wild", type: "wild", value: "W" });
+    d.push({ id: unoUid(), color: "wild", type: "wild4", value: "+4" });
+  }
+  return shuffle(d);
+}
+function sortUnoHand(hand) {
+  return [...hand].sort((a, b) =>
+    (UNO_COLOR_ORDER[a.color] ?? 9) - (UNO_COLOR_ORDER[b.color] ?? 9) ||
+    (UNO_TYPE_ORDER[a.type] ?? 9) - (UNO_TYPE_ORDER[b.type] ?? 9) ||
+    (Number(a.value) || 0) - (Number(b.value) || 0)
+  );
+}
+function activeUnoSeats(room) {
+  return room.seats.map((s, i) => s ? i : null).filter(i => i !== null);
+}
+function nextUnoPlayer(room, game, from = game.cur, steps = 1) {
+  const active = activeUnoSeats(room);
+  if (!active.length) return from;
+  let idx = active.indexOf(from);
+  if (idx < 0) idx = 0;
+  for (let i = 0; i < steps; i++) idx = (idx + game.dir + active.length) % active.length;
+  return active[idx];
+}
+function drawUno(game) {
+  if (!game.deck.length && game.discard.length > 1) {
+    const top = game.discard.pop();
+    game.deck = shuffle(game.discard);
+    game.discard = [top];
+  }
+  return game.deck.pop();
+}
+function canPlayUno(game, card) {
+  const top = game.discard[game.discard.length - 1];
+  return card.color === "wild" || card.color === game.currentColor || card.value === top.value || (card.type === top.type && card.type !== "num");
+}
+function newUnoGame(roomCode) {
+  const room = rooms[roomCode];
+  const deck = buildUnoDeck();
+  const hands = [[], [], [], []];
+  for (let r = 0; r < 7; r++) for (const i of activeUnoSeats(room)) hands[i].push(deck.pop());
+  let first = deck.pop();
+  while (first.color === "wild" || first.type !== "num") {
+    deck.unshift(first);
+    first = deck.pop();
+  }
+  const names = room.seats.map((s, i) => s ? (s.name || `Player ${i + 1}`) : "");
+  return {
+    roomCode,
+    names,
+    phase: "play",
+    deck,
+    hands: hands.map(sortUnoHand),
+    discard: [first],
+    currentColor: first.color,
+    cur: activeUnoSeats(room)[0],
+    dir: 1,
+    status: `${names[activeUnoSeats(room)[0]]}'s turn`,
+    uno: [false, false, false, false],
+    winner: null,
+    fx: { skipPid: null, dir: null, drawPid: null, drawCount: null }
+  };
+}
+function publicUnoState(roomCode, seatIndex) {
+  const g = rooms[roomCode].unoGame;
+  return {
+    roomCode,
+    names: g.names,
+    phase: g.phase,
+    deck: Array(g.deck.length).fill({ id: "back", color: "wild", type: "back", value: "" }),
+    hands: g.hands.map((h, i) => i === seatIndex ? h : Array(h.length).fill({ id: "back", color: "wild", type: "back", value: "" })),
+    discard: g.discard,
+    currentColor: g.currentColor,
+    cur: g.cur,
+    dir: g.dir,
+    status: g.status,
+    uno: g.uno,
+    winner: g.winner,
+    fx: g.fx || {}
+  };
+}
+function broadcastUno(roomCode) {
+  const room = rooms[roomCode];
+  if (!room || !room.unoGame) return;
+  room.seats.forEach((seat, idx) => {
+    if (seat && seat.id) io.to(seat.id).emit("unoGameState", { roomCode, gameState: publicUnoState(roomCode, idx), mySeatIndex: idx });
+  });
+}
+function applyUnoAction(roomCode, pid, card, chosenColor) {
+  const room = rooms[roomCode], g = room.unoGame;
+  g.fx = { skipPid: null, dir: null, drawPid: null, drawCount: null };
+  if (card.type === "reverse") {
+    g.dir *= -1;
+    g.fx.dir = g.dir;
+    g.cur = nextUnoPlayer(room, g, pid, 1);
+    g.status = `${g.names[pid]} switched direction`;
+  } else if (card.type === "skip") {
+    const skipped = nextUnoPlayer(room, g, pid, 1);
+    g.fx.skipPid = skipped;
+    g.cur = nextUnoPlayer(room, g, pid, 2);
+    g.status = `${g.names[skipped]} was skipped`;
+  } else if (card.type === "draw2" || card.type === "wild4") {
+    const n = card.type === "draw2" ? 2 : 4;
+    const target = nextUnoPlayer(room, g, pid, 1);
+    for (let i = 0; i < n; i++) {
+      const c = drawUno(g);
+      if (c) g.hands[target].push(c);
+    }
+    g.hands[target] = sortUnoHand(g.hands[target]);
+    g.fx.drawPid = target;
+    g.fx.drawCount = n;
+    g.cur = nextUnoPlayer(room, g, pid, 2);
+    g.status = `${g.names[target]} drew ${n} and was skipped`;
+  } else {
+    g.cur = nextUnoPlayer(room, g, pid, 1);
+    g.status = `${g.names[g.cur]}'s turn`;
+  }
 }
 
 // ── ARBA3MEYE HELPERS ─────────────────────────────────────
@@ -859,6 +1000,84 @@ function scheduleBotPlay(roomCode) {
   // The server never touches audio; it only forwards SDP and
   // ICE messages between peers so they can connect directly.
 
+  socket.on("createUnoRoom", () => {
+    const roomCode = makeRoomCode();
+    rooms[roomCode] = { hostId: socket.id, gameType: "uno", seats: [{ id: socket.id, name: "Host", type: "host" }, null, null, null] };
+    socket.join(roomCode);
+    socket.emit("unoRoomCreated", roomPayload(roomCode));
+  });
+
+  socket.on("joinUnoRoom", ({ roomCode, name }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || room.gameType !== "uno") { socket.emit("unoJoinError", "Room not found."); return; }
+    if (room.unoGame) { socket.emit("unoJoinError", "Game already started."); return; }
+    const emptyIdx = room.seats.findIndex(s => s === null);
+    if (emptyIdx === -1) { socket.emit("unoJoinError", "Room is full."); return; }
+    room.seats[emptyIdx] = { id: socket.id, name: name || `Player ${emptyIdx + 1}`, type: "player" };
+    socket.join(roomCode);
+    io.to(roomCode).emit("unoRoomUpdated", roomPayload(roomCode));
+  });
+
+  socket.on("startUnoRoom", ({ roomCode }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode];
+    if (!room || room.gameType !== "uno") { socket.emit("unoLobbyError", "Room not found."); return; }
+    if (room.hostId !== socket.id) { socket.emit("unoLobbyError", "Only the host can start."); return; }
+    if (room.seats.filter(Boolean).length < 2) { socket.emit("unoLobbyError", "Need at least 2 players."); return; }
+    room.unoGame = newUnoGame(roomCode);
+    room.seats.forEach((seat, idx) => {
+      if (seat && seat.id) io.to(seat.id).emit("unoGameStarted", { roomCode, gameState: publicUnoState(roomCode, idx), mySeatIndex: idx });
+    });
+  });
+
+  socket.on("unoPlayCard", ({ roomCode, cardId, chosenColor }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode], g = room?.unoGame;
+    const pid = room?.seats.findIndex(s => s && s.id === socket.id);
+    if (!g || pid == null || pid < 0 || g.cur !== pid || g.phase !== "play") { socket.emit("unoLobbyError", "Invalid move."); return; }
+    const card = g.hands[pid].find(c => c.id === cardId);
+    if (!card || !canPlayUno(g, card)) { socket.emit("unoLobbyError", "Invalid card."); return; }
+    if (card.color === "wild" && !UNO_COLORS.includes(chosenColor)) { socket.emit("unoLobbyError", "Choose a color."); return; }
+    g.hands[pid] = sortUnoHand(g.hands[pid].filter(c => c.id !== cardId));
+    g.discard.push(card);
+    g.uno[pid] = false;
+    g.currentColor = card.color === "wild" ? chosenColor : card.color;
+    if (g.hands[pid].length === 0) {
+      g.phase = "gameover";
+      g.winner = g.names[pid];
+      g.status = `${g.names[pid]} won`;
+      broadcastUno(roomCode);
+      return;
+    }
+    applyUnoAction(roomCode, pid, card);
+    broadcastUno(roomCode);
+  });
+
+  socket.on("unoDrawCard", ({ roomCode }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode], g = room?.unoGame;
+    const pid = room?.seats.findIndex(s => s && s.id === socket.id);
+    if (!g || pid == null || pid < 0 || g.cur !== pid || g.phase !== "play") { socket.emit("unoLobbyError", "Invalid draw."); return; }
+    const c = drawUno(g);
+    if (c) g.hands[pid] = sortUnoHand([...g.hands[pid], c]);
+    g.cur = nextUnoPlayer(room, g, pid, 1);
+    g.status = `${g.names[pid]} drew 1 card. ${g.names[g.cur]}'s turn`;
+    broadcastUno(roomCode);
+  });
+
+  socket.on("unoCall", ({ roomCode }) => {
+    roomCode = normalizeRoomCode(roomCode);
+    const room = rooms[roomCode], g = room?.unoGame;
+    const pid = room?.seats.findIndex(s => s && s.id === socket.id);
+    if (!g || pid == null || pid < 0) return;
+    if (g.hands[pid].length === 1) {
+      g.uno[pid] = true;
+      g.status = `${g.names[pid]} called UNO`;
+      broadcastUno(roomCode);
+    }
+  });
+
   socket.on("voice-join", ({ roomCode }) => {
     const rc = (roomCode || "").toUpperCase().trim().replace(/[^A-Z0-9]/g, "");
     const room = rooms[rc];
@@ -922,7 +1141,7 @@ function scheduleBotPlay(roomCode) {
       }
 
       if (changed) {
-        io.to(roomCode).emit(room.gameType === "arba3meye" ? "arbaRoomUpdated" : "roomUpdated", roomPayload(roomCode));
+        io.to(roomCode).emit(room.gameType === "arba3meye" ? "arbaRoomUpdated" : room.gameType === "uno" ? "unoRoomUpdated" : "roomUpdated", roomPayload(roomCode));
         // Tell any voice-connected players that this peer is gone
         socket.to(roomCode).emit("voice-peer-left", { peerId: socket.id });
       }

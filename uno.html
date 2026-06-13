@@ -240,6 +240,17 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:transparent;overflow
 .menu-btn{width:100%;height:44px;border-radius:22px;border:1.5px solid rgba(255,255,255,.18);cursor:pointer;font-size:14px;font-weight:900;letter-spacing:.2px}
 .menu-btn.primary{background:linear-gradient(135deg,#e6b800,#b88a00);color:#1a1200}
 .menu-btn.outline{background:rgba(255,255,255,.07);color:#fff}
+.room-panel{width:min(340px,92%);display:flex;flex-direction:column;gap:12px;align-items:center;background:rgba(0,0,0,.36);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:20px;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.room-code{font-size:28px;font-weight:1000;letter-spacing:3px;color:#ffe066;background:rgba(255,224,102,.12);border:1px solid rgba(255,224,102,.34);border-radius:12px;padding:8px 18px}
+.room-input{width:210px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.32);color:#fff;text-align:center;font-size:18px;font-weight:900;text-transform:uppercase;outline:none}
+.room-input::placeholder{color:rgba(255,255,255,.38)}
+.room-msg{min-height:16px;color:rgba(255,255,255,.68);font-size:11px;font-weight:800}
+.seat-list{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seat-box{min-height:58px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.seat-box.host{border-color:rgba(255,224,102,.4)}
+.seat-box.empty{opacity:.55;border-style:dashed}
+.seat-name{font-size:12px;color:#fff;font-weight:900}
+.seat-role{font-size:9px;color:rgba(255,255,255,.5);font-weight:800;text-transform:uppercase}
 
 /* Mobile */
 @media (max-width:520px){
@@ -280,16 +291,19 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:transparent;overflow
   <div id="app"></div>
 </div>
 
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
 const COLORS=['red','blue','green','yellow'];
 const COLOR_ORDER={red:0,blue:1,green:2,yellow:3,wild:4};
 const TYPE_ORDER={num:0,skip:10,reverse:11,draw2:12,wild:13,wild4:14};
 const CC={red:'cr',blue:'cb',green:'cg',yellow:'cy',wild:'cw'};
-const NAMES=['You','Bot 1','Bot 2','Bot 3'];
+let NAMES=['You','Bot 1','Bot 2','Bot 3'];
 let G={screen:'menu'};
 let pendingWildCard=null;
 let animating=false;
 let actingPid=null;
+let mySeatIndex=0;
+const socket=typeof io==='function'?io():null;
 
 function uid(){return Math.random().toString(36).slice(2,10)}
 function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
@@ -330,6 +344,36 @@ function canPlay(card){
 }
 function nextPlayer(from=G.cur,steps=1){let p=from;for(let i=0;i<steps;i++)p=(p+G.dir+4)%4;return p}
 function advance(steps=1){G.cur=nextPlayer(G.cur,steps)}
+function applyOnlineState(state,seatIndex){
+  mySeatIndex=seatIndex;
+  NAMES=state.names||NAMES;
+  G={...state,screen:'game',roomCode:G.roomCode||state.roomCode,phase:state.phase||'play'};
+  pendingWildCard=null;
+  animating=false;
+  actingPid=null;
+  render();
+}
+if(socket){
+  socket.on('unoRoomCreated',data=>{G={screen:'unoLobby',roomCode:data.roomCode,seats:data.seats,isHost:true,roomMsg:'Share this code with friends.'};render();});
+  socket.on('unoRoomUpdated',data=>{G={...G,screen:'unoLobby',roomCode:data.roomCode,seats:data.seats,isHost:data.hostId===socket.id,roomMsg:G.roomMsg||''};render();});
+  socket.on('unoGameStarted',data=>{applyOnlineState(data.gameState,data.mySeatIndex);});
+  socket.on('unoGameState',data=>{applyOnlineState(data.gameState,data.mySeatIndex);});
+  socket.on('unoLobbyError',msg=>{G.roomMsg=msg;render();});
+  socket.on('unoJoinError',msg=>{G={...G,screen:'joinRoom',roomMsg:msg};render();});
+}
+function openUnoRoomMenu(){G={screen:'roomMenu',roomMsg:''};render();}
+function showJoinRoom(){G={screen:'joinRoom',joinCode:'',joinName:'',roomMsg:''};render();}
+function createUnoRoom(){if(!socket){G.roomMsg='Open this through the server to use online rooms.';render();return;}G={screen:'roomMenu',roomMsg:'Creating room...'};render();socket.emit('createUnoRoom');}
+function joinUnoRoom(){
+  if(!socket){G.roomMsg='Open this through the server to use online rooms.';render();return;}
+  const roomCode=(G.joinCode||'').replace(/[^A-Z0-9]/gi,'').toUpperCase();
+  const name=(G.joinName||'').trim()||'Player';
+  if(roomCode.length<6){G.roomMsg='Enter the 6-character room code.';render();return;}
+  G.roomMsg='Joining...';render();
+  socket.emit('joinUnoRoom',{roomCode,name});
+}
+function startUnoRoom(){if(G.roomCode)socket.emit('startUnoRoom',{roomCode:G.roomCode});}
+function leaveUnoRoom(){G={screen:'menu'};render();}
 function startGame(){
   const deck=makeDeck();
   const hands=[[],[],[],[]];
@@ -428,6 +472,13 @@ async function animateDraw(pid,card,mutate){
   render();
 }
 async function playCard(pid,cardId,chosenColor=null){
+  if(G.roomCode){
+    if(pid!==mySeatIndex||G.cur!==mySeatIndex||G.phase!=='play')return;
+    const card=G.hands[mySeatIndex].find(c=>c.id===cardId);
+    if(card&&card.color==='wild'&&!chosenColor){pendingWildCard=card;G.phase='chooseColor';render();return;}
+    socket.emit('unoPlayCard',{roomCode:G.roomCode,cardId,chosenColor});
+    return;
+  }
   if(animating||G.phase!=='play'||G.cur!==pid)return;
   const hand=G.hands[pid];
   const card=hand.find(c=>c.id===cardId);
@@ -527,10 +578,16 @@ function chooseWildColor(color){
   if(!pendingWildCard)return;
   const card=pendingWildCard;
   pendingWildCard=null;
+  if(G.roomCode){G.phase='play';socket.emit('unoPlayCard',{roomCode:G.roomCode,cardId:card.id,chosenColor:color});return;}
   G.phase='play';
   playCard(0,card.id,color);
 }
 async function drawForPlayer(){
+  if(G.roomCode){
+    if(G.cur!==mySeatIndex||G.phase!=='play')return;
+    socket.emit('unoDrawCard',{roomCode:G.roomCode});
+    return;
+  }
   if(animating||G.cur!==0||G.phase!=='play')return;
   const c=drawOne();
   await animateDraw(0,c,()=>{
@@ -542,7 +599,10 @@ async function drawForPlayer(){
   render();
   if(G.cur!==0)setTimeout(botTurn,950);
 }
-function callUno(){if(G.hands[0]?.length===1){G.uno[0]=true;G.status='UNO called!';render()}}
+function callUno(){
+  if(G.roomCode){socket.emit('unoCall',{roomCode:G.roomCode});return;}
+  if(G.hands[0]?.length===1){G.uno[0]=true;G.status='UNO called!';render()}
+}
 function botChooseColor(pid){
   const counts={red:0,blue:0,green:0,yellow:0};
   for(const c of G.hands[pid])if(counts[c.color]!=null)counts[c.color]++;
@@ -591,8 +651,11 @@ function backs(n,vertical=false){
 function render(){
   const app=document.getElementById('app');
   if(G.screen==='menu'){app.innerHTML=menuHTML();return}
+  if(G.screen==='roomMenu'){app.innerHTML=roomMenuHTML();return}
+  if(G.screen==='joinRoom'){app.innerHTML=joinRoomHTML();return}
+  if(G.screen==='unoLobby'){app.innerHTML=lobbyHTML();return}
   app.innerHTML=gameHTML();
-  document.querySelectorAll('[data-card]').forEach(el=>el.onclick=()=>playCard(0,el.dataset.card));
+  document.querySelectorAll('[data-card]').forEach(el=>el.onclick=()=>playCard(G.roomCode?mySeatIndex:0,el.dataset.card));
   requestAnimationFrame(adjustHand);
 }
 function menuHTML(){
@@ -608,15 +671,61 @@ function menuHTML(){
     </div>
     <div class="menu-actions">
       <button class="menu-btn primary" onclick="startGame()">Quick Play</button>
-      <button class="menu-btn outline" onclick="alert('Online rooms can be added after the local version feels right.')">Custom Room Soon</button>
+      <button class="menu-btn outline" onclick="openUnoRoomMenu()">Custom Room</button>
     </div>
   </div>`;
 }
+function roomMenuHTML(){
+  return `<div class="menu-screen"><div class="room-panel">
+    <div class="title" style="font-size:28px">UNO Online</div>
+    <div class="subtitle">Create a room or join with a code.</div>
+    <div class="menu-actions">
+      <button class="menu-btn primary" onclick="createUnoRoom()">Create Room</button>
+      <button class="menu-btn outline" onclick="showJoinRoom()">Join Room</button>
+      <button class="menu-btn outline" onclick="leaveUnoRoom()">Back</button>
+    </div>
+    <div class="room-msg">${G.roomMsg||''}</div>
+  </div></div>`;
+}
+function joinRoomHTML(){
+  return `<div class="menu-screen"><div class="room-panel">
+    <div class="title" style="font-size:28px">Join UNO</div>
+    <input class="room-input" maxlength="6" placeholder="CODE" value="${G.joinCode||''}" oninput="G.joinCode=this.value.toUpperCase();this.value=G.joinCode">
+    <input class="room-input" maxlength="16" placeholder="NAME" value="${G.joinName||''}" oninput="G.joinName=this.value">
+    <div class="menu-actions">
+      <button class="menu-btn primary" onclick="joinUnoRoom()">Join</button>
+      <button class="menu-btn outline" onclick="openUnoRoomMenu()">Back</button>
+    </div>
+    <div class="room-msg">${G.roomMsg||''}</div>
+  </div></div>`;
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+function lobbyHTML(){
+  const seats=G.seats||[];
+  return `<div class="menu-screen"><div class="room-panel">
+    <div class="title" style="font-size:28px">UNO Room</div>
+    <div class="room-code">${G.roomCode||''}</div>
+    <div class="seat-list">${[0,1,2,3].map(i=>{
+      const s=seats[i];
+      return `<div class="seat-box ${s?.type==='host'?'host':''} ${!s?'empty':''}"><div class="seat-name">${s?escapeHtml(s.name||('Player '+(i+1))):'Empty'}</div><div class="seat-role">${s?(s.type==='host'?'Host':'Player'):'Seat '+(i+1)}</div></div>`;
+    }).join('')}</div>
+    <div class="menu-actions">
+      ${G.isHost?`<button class="menu-btn primary" onclick="startUnoRoom()">Start Game</button>`:''}
+      <button class="menu-btn outline" onclick="leaveUnoRoom()">Back</button>
+    </div>
+    <div class="room-msg">${G.roomMsg||'Need at least 2 players to start.'}</div>
+  </div></div>`;
+}
 function gameHTML(){
   const top=topCard();
-  const myTurn=G.cur===0&&G.phase==='play'&&!animating;
-  const playable=new Set(myTurn?G.hands[0].filter(canPlay).map(c=>c.id):[]);
-  const hand=G.hands[0].map(c=>cardHTML(c,{id:true,playable:playable.has(c.id),unplayable:myTurn&&!playable.has(c.id)})).join('');
+  const me=G.roomCode?mySeatIndex:0;
+  const right=G.roomCode?(me+1)%4:1;
+  const topSeat=G.roomCode?(me+2)%4:2;
+  const left=G.roomCode?(me+3)%4:3;
+  const myHand=G.hands[me]||[];
+  const myTurn=G.cur===me&&G.phase==='play'&&!animating;
+  const playable=new Set(myTurn?myHand.filter(canPlay).map(c=>c.id):[]);
+  const hand=myHand.map(c=>cardHTML(c,{id:true,playable:playable.has(c.id),unplayable:myTurn&&!playable.has(c.id)})).join('');
   const av=(i,label)=>`<div style="position:relative">${G.fx&&G.fx.skipPid===i?'<div class="skip-badge">SKIP</div>':''}${G.fx&&G.fx.drawPid===i?'<div class="draw-count-pop">+'+G.fx.drawCount+'</div>':''}<div class="avatar ${G.cur===i&&G.phase==='play'?'active':''} ${actingPid===i?'acting':''}">${label}</div></div>`;
   let modal='';
   if(G.phase==='chooseColor'){
@@ -640,13 +749,13 @@ function gameHTML(){
   }
   return `<div class="topbar">
     <div class="score-strip">
-      ${[0,1,2,3].map(i=>`<div class="score-item"><div class="sn">${NAMES[i]}</div><div class="sv">${G.hands[i].length}</div></div>`).join('<div style="width:1px;height:22px;background:rgba(255,255,255,.1)"></div>')}
+      ${[0,1,2,3].map(i=>`<div class="score-item"><div class="sn">${NAMES[i]||('P'+(i+1))}</div><div class="sv">${G.hands[i]?.length||0}</div></div>`).join('<div style="width:1px;height:22px;background:rgba(255,255,255,.1)"></div>')}
     </div>
   </div>
   <div id="table-wrap">
-    <div class="tz-top"><div class="player-zone">${av(2,'B2')}<div class="pname">Bot 2</div><div class="pscore">${G.hands[2].length} cards</div>${backs(G.hands[2].length)}</div></div>
-    <div class="tz-left"><div class="player-zone">${av(3,'B3')}<div class="pname">Bot 3</div><div class="pscore">${G.hands[3].length}</div>${backs(G.hands[3].length,true)}</div></div>
-    <div class="tz-right"><div class="player-zone">${av(1,'B1')}<div class="pname">Bot 1</div><div class="pscore">${G.hands[1].length}</div>${backs(G.hands[1].length,true)}</div></div>
+    <div class="tz-top"><div class="player-zone">${av(topSeat,'P'+(topSeat+1))}<div class="pname">${NAMES[topSeat]||('Seat '+(topSeat+1))}</div><div class="pscore">${G.hands[topSeat]?.length||0} cards</div>${backs(G.hands[topSeat]?.length||0)}</div></div>
+    <div class="tz-left"><div class="player-zone">${av(left,'P'+(left+1))}<div class="pname">${NAMES[left]||('Seat '+(left+1))}</div><div class="pscore">${G.hands[left]?.length||0}</div>${backs(G.hands[left]?.length||0,true)}</div></div>
+    <div class="tz-right"><div class="player-zone">${av(right,'P'+(right+1))}<div class="pname">${NAMES[right]||('Seat '+(right+1))}</div><div class="pscore">${G.hands[right]?.length||0}</div>${backs(G.hands[right]?.length||0,true)}</div></div>
     <div class="tz-mid">
       <div class="turn-arrow">${G.dir===1?'Clockwise ↻':'Counter ↺'}</div>
       <div class="color-chip">Current color: <b>${G.currentColor}</b><span class="color-box ${G.currentColor}"></span></div>
@@ -658,7 +767,7 @@ function gameHTML(){
       <div class="status-bar">${animating?(NAMES[actingPid]+' is moving a card…'):G.status}</div>
     </div>
     <div class="tz-btm">
-      <div class="my-info">${av(0,'YOU')}<div><div class="pname">You</div><div class="pscore">${G.hands[0].length} cards ${G.uno[0]?'<span class="warn">· UNO</span>':''}</div></div></div>
+      <div class="my-info">${av(me,'YOU')}<div><div class="pname">You</div><div class="pscore">${myHand.length} cards ${G.uno[me]?'<span class="warn">· UNO</span>':''}</div></div></div>
       <div id="my-hand">${hand}</div>
       <div class="actions">
         <button class="chip-btn" onclick="drawForPlayer()" ${!myTurn?'disabled':''}>Draw & Skip</button>
