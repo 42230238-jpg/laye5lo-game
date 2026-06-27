@@ -303,7 +303,8 @@ let pendingWildCard=null;
 let animating=false;
 let actingPid=null;
 let mySeatIndex=0;
-const socket=typeof io==='function'?io():null;
+const BACKEND_URL="https://laye5lo-game.onrender.com";
+const socket=typeof io==='function'?io(BACKEND_URL):null;
 
 function uid(){return Math.random().toString(36).slice(2,10)}
 function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
@@ -354,6 +355,7 @@ function applyOnlineState(state,seatIndex){
   render();
 }
 if(socket){
+  socket.on('connect_error',()=>{G.roomMsg='Could not connect to the online server. Try again in a moment.';render();});
   socket.on('unoRoomCreated',data=>{G={screen:'unoLobby',roomCode:data.roomCode,seats:data.seats,isHost:true,roomMsg:'Share this code with friends.'};render();});
   socket.on('unoRoomUpdated',data=>{G={...G,screen:'unoLobby',roomCode:data.roomCode,seats:data.seats,isHost:data.hostId===socket.id,roomMsg:G.roomMsg||''};render();});
   socket.on('unoGameStarted',data=>{applyOnlineState(data.gameState,data.mySeatIndex);});

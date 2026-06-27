@@ -231,6 +231,16 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   box-shadow:0 6px 18px rgba(0,0,0,0.45);
   animation:skip-bump .9s ease both;
 }
+.skip-stack{
+  position:absolute;left:50%;top:-8px;z-index:18;
+  transform:translate(-50%,-100%);
+  padding:2px 7px;border-radius:10px;
+  background:rgba(220,38,38,0.95);color:#fff;
+  border:1px solid rgba(255,255,255,0.28);
+  font-size:9px;font-weight:1000;letter-spacing:.2px;
+  box-shadow:0 4px 14px rgba(0,0,0,0.42);
+  white-space:nowrap;
+}
 @keyframes skip-bump{
   0%{opacity:0;transform:translate(-50%,0) scale(.72)}
   30%{opacity:1;transform:translate(-50%,-54%) scale(1.16)}
@@ -267,8 +277,16 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   max-width:min(260px,100%);padding:3px 4px;border-radius:7px;
   background:rgba(34,238,102,0.08);border:1px solid rgba(34,238,102,0.22);
 }
+.seat-laid.can-add{cursor:pointer}
+.seat-laid.can-add .seat-laid-group:hover,.my-laid-group.can-add:hover{
+  border-color:rgba(255,224,102,0.6);
+  box-shadow:0 0 0 1px rgba(255,224,102,0.35),0 0 14px rgba(255,224,102,0.25);
+}
 .seat-laid-title{font-size:7px;color:#22ee66;font-weight:900;width:100%;text-align:center}
-.seat-laid-group{display:flex;gap:2px;align-items:center;justify-content:center;flex-wrap:wrap}
+.seat-laid-group{
+  display:flex;gap:2px;align-items:center;justify-content:center;flex-wrap:wrap;
+  border:1px solid transparent;border-radius:6px;padding:2px;
+}
 .tz-left .seat-laid,.tz-right .seat-laid{
   max-width:92px;flex-direction:column;flex-wrap:nowrap;overflow:visible;
 }
@@ -279,6 +297,32 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .tz-right .seat-laid{align-self:flex-start;margin-left:-52px;order:3}
 .tz-right .side-cards{order:4}
 .tz-left .side-cards{order:4}
+.opp-seat .seat-laid{
+  margin-top:2px;
+  max-width:170px;
+  transform:scale(.88);
+  transform-origin:top center;
+}
+.opp-seat[data-side="left"] .seat-laid,.opp-seat[data-side="right"] .seat-laid{
+  max-width:82px;
+  flex-direction:column;
+  flex-wrap:nowrap;
+}
+.opp-seat[data-side="left"] .seat-laid-group,.opp-seat[data-side="right"] .seat-laid-group{
+  max-width:78px;
+  display:grid;
+  grid-template-columns:repeat(2,32px);
+}
+.my-laid-area{
+  display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap;
+  max-width:min(760px,96%);padding:4px 6px;border-radius:10px;
+  background:rgba(34,238,102,0.07);border:1px solid rgba(34,238,102,0.22);
+}
+.my-laid-title{font-size:8px;color:#22ee66;font-weight:900;letter-spacing:.2px}
+.my-laid-group{
+  display:flex;gap:2px;align-items:center;justify-content:center;flex-wrap:wrap;
+  border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:3px 5px;
+}
 
 /* Phase 10 card faces */
 .card.phase-card{
@@ -658,6 +702,10 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   min-height:16px;color:rgba(255,255,255,0.72);font-size:11px;font-weight:600;
   text-align:center;
 }
+.seat-list{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seat-box{min-height:56px;border-radius:12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.seat-box.host{border-color:rgba(255,224,102,0.4)}
+.seat-box.empty{opacity:0.6;border-style:dashed}
 .back-arrow{
   position:absolute;top:16px;left:16px;z-index:20;
   width:40px;height:40px;border-radius:50%;
@@ -771,6 +819,14 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .tz-top2 .player-zone{height:calc(var(--top-row) - 4px);overflow:hidden}
 /* Side zones: let them fill their grid cell naturally */
 .tz-left .player-zone,.tz-right .player-zone{width:100%}
+.opp-ring{position:absolute;inset:0;pointer-events:none;z-index:5}
+.opp-seat{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;transition:left .28s ease,top .28s ease,transform .28s ease}
+.opp-seat .player-zone{min-width:64px}
+.opp-seat[data-side="left"] .side-cards,.opp-seat[data-side="right"] .side-cards{max-height:156px}
+.opp-seat[data-side="top"] .player-zone{min-width:86px}
+.opp-seat[data-side="top"] .opp-cards{transform:scale(.92);transform-origin:top center}
+.opp-seat[data-side="top"]{z-index:4}
+.opp-seat[data-side="left"],.opp-seat[data-side="right"]{z-index:6}
 
 /* Fixed height hand — cards are direct children; adjustHand() sets marginRight */
 #my-hand{
@@ -1010,10 +1066,16 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 
 
 /* ═══ PHASE 10 OVERRIDES ═══ */
-:root { --btm-row: 268px; }
-.tz-mid  { overflow-y: auto; gap: 4px; padding: 3px 4px; }
-.tz-btm  { overflow-y: auto; justify-content: flex-start; padding: 3px 4px 6px; gap: 3px; }
+:root { --btm-row: 304px; }
+.tz-mid  { overflow: visible; gap: 4px; padding: 3px 4px; }
+.tz-btm  { overflow: visible; justify-content: flex-start; padding: 3px 4px 6px; gap: 3px; }
 .tz-left, .tz-right { overflow:hidden; }
+@media (max-width: 760px), (max-height: 620px){
+  :root { --btm-row: 236px; }
+  .my-laid-area{max-width:98%;gap:3px;padding:3px 4px}
+  .my-laid-area .mini-phase{width:34px;height:51px}
+  .my-laid-title{font-size:7px;width:100%}
+}
 
 /* Back arrow button */
 .back-arrow {
@@ -1061,6 +1123,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 </head>
 <body>
 <div id="game"><div id="root"></div></div>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════
 //  PHASE 10  —  Full Game Logic
@@ -1086,16 +1149,19 @@ const COLOR_SORT = {cr:0,cb:1,cg:2,cy:3};
 
 let S = {};
 let _cid = 0;
+let mySeatIndex = 0;
+const BACKEND_URL = "https://laye5lo-game.onrender.com";
+const socket = typeof io === 'function' ? io(BACKEND_URL) : null;
+const PLAYER_NAMES = ['You','Alex','Sam','Jordan','Maya','Omar'];
+const PLAYER_EMOJI = ['🙂','🤖','👾','🎯','🚀','⭐'];
 
-function initState(){
+function initState(playerCount=4){
+  playerCount=Math.max(3,Math.min(6,Number(playerCount)||4));
   S={
     screen:'menu',
-    players:[
-      mkP(0,'You',true,'🙂'),
-      mkP(1,'Alex',false,'🤖'),
-      mkP(2,'Sam',false,'👾'),
-      mkP(3,'Jordan',false,'🎯'),
-    ],
+    playerCount,
+    roomSeats:playerCount,
+    players:Array.from({length:playerCount},(_,i)=>mkP(i,PLAYER_NAMES[i]||('Player '+(i+1)),i===0,PLAYER_EMOJI[i]||'🙂')),
     deck:[],discard:[],
     cur:0,
     tPhase:'draw',
@@ -1103,9 +1169,11 @@ function initState(){
     staging:[[],[]],
     msg:'Welcome to Phase 10!',
     round:1,
+    startSeat:0,
     busy:false,
     skipPick:null,
     skipFx:null,
+    addTarget:null,
     over:false,
     winner:null,
     roundResults:null,
@@ -1114,6 +1182,43 @@ function initState(){
 function mkP(id,name,isHuman,emoji){
   return{id,name,isHuman,emoji,hand:[],phase:0,laid:false,groups:[],score:0,skipMe:false};
 }
+
+function applyOnlineState(state,seatIndex){
+  mySeatIndex=seatIndex;
+  S={...state,sel:new Set(),skipPick:null,busy:false,addTarget:S.addTarget||null};
+  render();
+  adjustHand();
+}
+if(socket){
+  socket.on('connect_error',()=>{S.roomMsg='Could not connect to the online server. Try again in a moment.';S.msg=S.roomMsg;render();});
+  socket.on('phase10RoomCreated',data=>{S={screen:'phase10Lobby',roomCode:data.roomCode,seats:data.seats,roomSeats:data.playerCount||data.seats?.length||4,isHost:true,roomMsg:'Share this code with friends.'};render();});
+  socket.on('phase10RoomUpdated',data=>{S={...S,screen:'phase10Lobby',roomCode:data.roomCode,seats:data.seats,roomSeats:data.playerCount||data.seats?.length||S.roomSeats||4,isHost:data.hostId===socket.id,roomMsg:S.roomMsg||''};render();});
+  socket.on('phase10GameStarted',data=>applyOnlineState(data.gameState,data.mySeatIndex));
+  socket.on('phase10GameState',data=>applyOnlineState(data.gameState,data.mySeatIndex));
+  socket.on('phase10LobbyError',msg=>{S.roomMsg=msg;S.msg=msg;render();});
+  socket.on('phase10JoinError',msg=>{S={...S,screen:'joinRoom',roomMsg:msg};render();});
+}
+function openRoomMenu(){S={...S,screen:'roomMenu',roomSeats:S.roomSeats||S.playerCount||4,roomMsg:''};render();}
+function showJoinRoom(){S={screen:'joinRoom',joinCode:'',joinName:'',roomMsg:''};render();}
+function setRoomSeats(n){S.roomSeats=Math.max(3,Math.min(6,Number(n)||4));S.roomMsg='';render();}
+function setQuickPlayers(n){initState(n);render();}
+function createPhase10Room(){
+  if(!socket){S.roomMsg='Open this through the server to use online rooms.';render();return;}
+  const playerCount=S.roomSeats||4;
+  S={screen:'roomMenu',roomSeats:playerCount,roomMsg:'Creating room...'};render();
+  socket.emit('createPhase10Room',{playerCount});
+}
+function joinPhase10Room(){
+  if(!socket){S.roomMsg='Open this through the server to use online rooms.';render();return;}
+  const roomCode=(S.joinCode||'').replace(/[^A-Z0-9]/gi,'').toUpperCase();
+  const name=(S.joinName||'').trim()||'Player';
+  if(roomCode.length<6){S.roomMsg='Enter the 6-character room code.';render();return;}
+  S.roomMsg='Joining...';render();
+  socket.emit('joinPhase10Room',{roomCode,name});
+}
+function startPhase10Room(){if(S.roomCode&&socket)socket.emit('startPhase10Room',{roomCode:S.roomCode});}
+function leavePhase10Room(){initState();render();}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
 
 // ── DECK ───────────────────────────────────────────────
 function createDeck(){
@@ -1144,30 +1249,45 @@ function sortCards(cards){
 }
 function sortHand(player){player.hand=sortCards(player.hand);}
 function sortAllHands(){S.players.forEach(sortHand);}
+function nextSeat(from=S.cur){return (from+S.players.length-1)%S.players.length;}
+function skipCount(p){return Number(p.skipCount||0)+(p.skipMe?1:0);}
+function addSkip(pid){
+  const p=S.players[pid];if(!p)return;
+  p.skipCount=skipCount(p)+1;
+  p.skipMe=false;
+}
+function consumeSkip(p){
+  const n=skipCount(p);
+  p.skipMe=false;
+  p.skipCount=Math.max(0,n-1);
+  return n>0;
+}
 
 // ── GAME FLOW ──────────────────────────────────────────
-function startGame(){
-  initState();
+function startGame(playerCount=S.playerCount||4){
+  initState(playerCount);
   S.screen='game';
   startRound();
 }
 function startRound(){
   S.deck=createDeck(); S.discard=[];
   S.staging=[[],[]]; S.sel=new Set(); S.over=false;
-  for(const p of S.players){p.hand=[];p.laid=false;p.groups=[];p.skipMe=false;}
+  for(const p of S.players){p.hand=[];p.laid=false;p.groups=[];p.skipMe=false;p.skipCount=0;}
   for(let i=0;i<10;i++) for(const p of S.players) p.hand.push(S.deck.pop());
   sortAllHands();
   // First discard cannot be skip
   let top=S.deck.pop();
   while(top.t==='skip'){S.deck.unshift(top);top=S.deck.pop();}
   S.discard.push(top);
-  S.cur=0; S.tPhase='draw';
+  S.cur=S.startSeat||0; S.tPhase='draw';
   S.msg='Round '+S.round+' — Draw a card to start!';
   render();
+  if(S.cur!==0)setTimeout(aiTurn,900);
 }
 
 // ── HUMAN ACTIONS ──────────────────────────────────────
 function drawDeck(){
+  if(S.roomCode){if(socket)socket.emit('phase10DrawDeck',{roomCode:S.roomCode});return;}
   if(S.tPhase!=='draw'||S.cur!==0||S.over||S.busy)return;
   if(!S.deck.length)reshuffleDiscard();
   if(!S.deck.length)return;
@@ -1183,6 +1303,7 @@ function drawDeck(){
   });
 }
 function drawDiscard(){
+  if(S.roomCode){if(socket)socket.emit('phase10DrawDiscard',{roomCode:S.roomCode});return;}
   if(S.tPhase!=='draw'||S.cur!==0||S.over||S.busy)return;
   if(!S.discard.length)return;
   const c=S.discard.pop();
@@ -1200,10 +1321,30 @@ function drawDiscard(){
 function toggleSel(id){
   if(S.tPhase!=='action'||S.cur!==0||S.over)return;
   if(!S.players[0].hand.some(c=>c.id===id))return;
+  if(S.addTarget&&S.players[0].laid){
+    S.sel=new Set([id]);
+    addToGroup(S.addTarget.pid,S.addTarget.gi);
+    return;
+  }
   if(S.sel.has(id))S.sel.delete(id);else S.sel.add(id);
   render();
 }
+function selectAddTarget(pid,gi){
+  const me=S.players[0];
+  const target=S.players[pid];
+  if(S.tPhase!=='action'||S.cur!==0||S.over||!me.laid||!target?.laid||!target.groups?.[gi])return;
+  S.addTarget={pid,gi};
+  S.sel=new Set();
+  S.msg='Selected '+(pid===0?'your':target.name+"'s")+' group '+(gi+1)+'. Now click one card from your hand to add.';
+  render();
+}
+function clearAddTarget(){S.addTarget=null;S.sel=new Set();render();}
 function toStage(gi){
+  if(S.roomCode){
+    const cardIds=S.players[0].hand.filter(c=>S.sel.has(c.id)).map(c=>c.id);
+    if(cardIds.length&&socket)socket.emit('phase10Stage',{roomCode:S.roomCode,groupIndex:gi,cardIds});
+    return;
+  }
   if(S.tPhase!=='action'||S.players[0].laid||S.over)return;
   const ph=PHASES[S.players[0].phase];
   if(gi>=ph.reqs.length)return;
@@ -1216,27 +1357,23 @@ function toStage(gi){
   render();adjustHand();
 }
 function toStage(gi){
+  if(S.roomCode){
+    const cardIds=S.players[0].hand.filter(c=>S.sel.has(c.id)).map(c=>c.id);
+    if(cardIds.length&&socket)socket.emit('phase10Stage',{roomCode:S.roomCode,groupIndex:gi,cardIds});
+    return;
+  }
   if(S.tPhase!=='action'||S.players[0].laid||S.over)return;
   const ph=PHASES[S.players[0].phase];
   if(gi>=ph.reqs.length)return;
   const req=ph.reqs[gi];
   const chosen=S.players[0].hand.filter(c=>S.sel.has(c.id)&&c.t!=='skip');
   if(!chosen.length){S.msg='Skip cards cannot be used in phase groups.';render();return;}
-  const accepted=[];
-  const returned=[];
-  let test=[...(S.staging[gi]||[])];
-  for(const c of chosen){
-    const next=[...test,c];
-    if(canStillFitGroup(next,req)){
-      test=next;
-      accepted.push(c);
-    }else{
-      returned.push(c);
-    }
-  }
+  const test=[...(S.staging[gi]||[])];
+  const accepted=bestAcceptedForGroup(test,chosen,req);
+  const acceptedIds=new Set(accepted.map(c=>c.id));
+  const returned=chosen.filter(c=>!acceptedIds.has(c.id));
   if(accepted.length){
-    S.staging[gi]=test;
-    const acceptedIds=new Set(accepted.map(c=>c.id));
+    S.staging[gi]=[...test,...accepted];
     S.players[0].hand=S.players[0].hand.filter(c=>!acceptedIds.has(c.id));
   }
   chosen.forEach(c=>S.sel.delete(c.id));
@@ -1247,6 +1384,7 @@ function toStage(gi){
   render();adjustHand();
 }
 function fromStage(gi,id){
+  if(S.roomCode){if(socket)socket.emit('phase10FromStage',{roomCode:S.roomCode,groupIndex:gi,cardId:id});return;}
   const i=S.staging[gi].findIndex(c=>c.id===id);
   if(i<0)return;
   const[c]=S.staging[gi].splice(i,1);
@@ -1255,12 +1393,14 @@ function fromStage(gi,id){
   render();adjustHand();
 }
 function clearStage(){
+  if(S.roomCode){if(socket)socket.emit('phase10ClearStage',{roomCode:S.roomCode});return;}
   for(let i=0;i<2;i++){S.players[0].hand.push(...S.staging[i]);S.staging[i]=[];}
   sortHand(S.players[0]);
   S.sel=new Set();
   render();adjustHand();
 }
 function layDown(){
+  if(S.roomCode){if(socket)socket.emit('phase10LayDown',{roomCode:S.roomCode});return;}
   const me=S.players[0];
   if(me.laid||S.over)return;
   const ph=PHASES[me.phase];
@@ -1269,10 +1409,21 @@ function layDown(){
   me.laid=true;
   me.groups=ph.reqs.map((_,i)=>[...S.staging[i]]);
   S.staging=[[],[]];
+  playSfx('phase');
+  if(me.hand.length===0){endRound(0);return;}
   S.msg='✅ Phase '+(me.phase+1)+' laid down! Discard a card to end your turn.';
   render();
 }
 function addToGroup(pid,gi){
+  if(S.roomCode){
+    const cardIds=S.players[0].hand.filter(c=>S.sel.has(c.id)).map(c=>c.id);
+    if(cardIds.length&&socket){
+      socket.emit('phase10AddToGroup',{roomCode:S.roomCode,targetLocalPid:pid,groupIndex:gi,cardIds});
+      S.addTarget=null;
+      S.sel=new Set();
+    }
+    return;
+  }
   const me=S.players[0];
   if(!me.laid){S.msg='Lay down your phase before adding cards to other groups.';render();return;}
   const chosen=me.hand.filter(c=>S.sel.has(c.id));
@@ -1288,11 +1439,20 @@ function addToGroup(pid,gi){
     const addedIds=new Set(added.map(c=>c.id));
     me.hand=me.hand.filter(c=>!addedIds.has(c.id));
     added.forEach(c=>S.sel.delete(c.id));
+    S.addTarget=null;
     S.msg='Added '+added.length+' card'+(added.length>1?'s':'')+' to '+(pid===0?'your':target.name+"'s")+' group '+(gi+1)+'!';
+    if(me.hand.length===0){endRound(0);return;}
   }else{S.msg='❌ Those cards can\'t be added there.';}
+  if(!added.length)S.sel=new Set();
   render();adjustHand();
 }
 function doDiscard(id){
+  if(S.roomCode){
+    const card=S.players[0].hand.find(c=>c.id===id);
+    if(card&&card.t==='skip'){S.skipPick=id;S.msg='Choose who to skip.';render();return;}
+    if(socket)socket.emit('phase10Discard',{roomCode:S.roomCode,cardId:id});
+    return;
+  }
   if(S.tPhase!=='action'||S.cur!==0||S.over||S.busy)return;
   const me=S.players[0];
   const i=me.hand.findIndex(c=>c.id===id);
@@ -1301,6 +1461,7 @@ function doDiscard(id){
   finishDiscard(id,null);
 }
 function chooseSkipTarget(pid){
+  if(S.roomCode){if(socket&&S.skipPick!=null)socket.emit('phase10Discard',{roomCode:S.roomCode,cardId:S.skipPick,skipLocalPid:pid});return;}
   if(S.cur!==0||S.skipPick==null)return;
   finishDiscard(S.skipPick,pid);
 }
@@ -1314,8 +1475,8 @@ function finishDiscard(id,skipPid){
   animateCardToDiscard(c,()=>{
     S.discard.push(c);
     if(skipPid!=null){
-      S.players[skipPid].skipMe=true;
-      S.msg=S.players[skipPid].name+' will be skipped!';
+      addSkip(skipPid);
+      S.msg=S.players[skipPid].name+' will be skipped! ('+skipCount(S.players[skipPid])+')';
     }
     S.busy=false;
     if(me.hand.length===0){endRound(S.cur);return;}
@@ -1323,16 +1484,9 @@ function finishDiscard(id,skipPid){
   });
 }
 function doEndTurn(){
-  S.cur=(S.cur+1)%4;
+  S.cur=nextSeat();
   S.sel=new Set();
-  const curr=S.players[S.cur];
-  if(curr.skipMe){
-    curr.skipMe=false;
-    S.msg=curr.name+' is skipped!';
-    showSkip(curr.id,()=>{S.cur=(S.cur+1)%4;beginTurn();});
-    return;
-  }
-  beginTurn();
+  advancePastSkipped();
 }
 function beginTurn(){
   const curr=S.players[S.cur];
@@ -1367,6 +1521,7 @@ function aiTurn(){
         ai.laid=true;ai.groups=res;
         const used=new Set(res.flat().map(c=>c.id));
         ai.hand=ai.hand.filter(c=>!used.has(c.id));
+        playSfx('phase');
         S.msg=ai.name+' laid down Phase '+(ai.phase+1)+'!';
         render();
       }
@@ -1380,29 +1535,34 @@ function aiTurn(){
       S.discard.push(c);
       if(c.t==='skip'){
         const ni=chooseAiSkipTarget(ai.id);
-        S.players[ni].skipMe=true;
+        addSkip(ni);
         S.msg=ai.name+' discarded Skip — '+S.players[ni].name+' loses their turn!';
       }else{S.msg=ai.name+' discarded '+cardLbl(c)+'.';}
       render();
     }
     if(ai.hand.length===0){endRound(myIdx);return;}
-    S.cur=(S.cur+1)%4;
+    S.cur=nextSeat();
     const next=S.players[S.cur];
-    if(next.skipMe){
-      next.skipMe=false;
+    if(consumeSkip(next)){
       S.msg=next.name+' is skipped!';
       render();
-      setTimeout(()=>{S.cur=(S.cur+1)%4;beginTurn();},1100);
+      setTimeout(()=>{S.cur=nextSeat();beginTurn();},1100);
       return;
     }
     beginTurn();
   },1100);
 }
 function chooseAiSkipTarget(aiId){
-  const candidates=S.players.filter(p=>p.id!==aiId&&!p.skipMe);
-  const human=candidates.find(p=>p.isHuman);
-  if(human&&Math.random()<0.55)return human.id;
-  return candidates.sort((a,b)=>(b.phase-a.phase)||(a.score-b.score))[0]?.id ?? ((aiId+1)%4);
+  const candidates=S.players.filter(p=>p.id!==aiId);
+  const threat=p=>
+    p.phase*1000 +
+    (p.laid?260:0) +
+    Math.max(0,14-p.hand.length)*32 +
+    (p.phase>=8?220:0) +
+    (p.phase===9?380:0) -
+    skipCount(p)*80 -
+    p.score*0.4;
+  return candidates.sort((a,b)=>threat(b)-threat(a)||a.hand.length-b.hand.length||a.score-b.score)[0]?.id ?? nextSeat(aiId);
 }
 function aiTurn(){
   const ai=S.players[S.cur];
@@ -1472,7 +1632,7 @@ function aiDiscardAndAdvance(pid){
     S.discard.push(card);
     if(card.t==='skip'){
       const target=chooseAiSkipTarget(pid);
-      S.players[target].skipMe=true;
+      addSkip(target);
       S.msg=ai.name+' skipped '+S.players[target].name+'!';
     }
     S.busy=false;
@@ -1482,23 +1642,38 @@ function aiDiscardAndAdvance(pid){
   });
 }
 function advanceAfterTurn(){
-  S.cur=(S.cur+1)%4;
+  S.cur=nextSeat();
+  advancePastSkipped();
+}
+function advancePastSkipped(){
   const next=S.players[S.cur];
-  if(next.skipMe){
-    next.skipMe=false;
+  if(consumeSkip(next)){
     S.msg=next.name+' is skipped!';
-    showSkip(next.id,()=>{S.cur=(S.cur+1)%4;beginTurn();});
+    showSkip(next.id,()=>{
+      S.cur=nextSeat();
+      advancePastSkipped();
+    });
     return;
   }
   beginTurn();
 }
 function showSkip(pid,done){
   S.skipFx=pid;
+  playSfx('skip');
   render();
   setTimeout(()=>{S.skipFx=null;render();if(done)done();},900);
 }
 function usefulForPhase(card,player){
   if(card.t==='wild')return true;
+  if(player.laid){
+    for(const target of S.players){
+      if(!target.laid||!target.groups.length)continue;
+      for(let gi=0;gi<target.groups.length;gi++){
+        const req=PHASES[target.phase].reqs[gi];
+        if(canAddTo(card,target.groups[gi],req))return true;
+      }
+    }
+  }
   const ph=PHASES[player.phase];
   const hand=[...player.hand,card];
   for(const req of ph.reqs){
@@ -1606,6 +1781,40 @@ function canAddTo(card,group,req){
   }
   return false;
 }
+function displayGroupCards(cards,req){
+  if(!req||req.t!=='run')return sortCards(cards);
+  const nums=cards.filter(c=>c.t==='num').sort((a,b)=>a.v-b.v||a.id-b.id);
+  const wilds=cards.filter(c=>c.t==='wild');
+  if(!wilds.length)return sortCards(cards);
+  if(!nums.length)return sortCards(cards);
+  const usedWilds=new Set();
+  const slots=nums.map(c=>({card:c,value:c.v}));
+  const values=new Set(nums.map(c=>c.v));
+  let wi=0;
+  for(let v=nums[0].v;v<=nums[nums.length-1].v&&wi<wilds.length;v++){
+    if(!values.has(v)){
+      slots.push({card:wilds[wi],value:v,wild:true});
+      usedWilds.add(wilds[wi].id);
+      wi++;
+    }
+  }
+  let remaining=wilds.length-wi;
+  const leftSlots=Math.min(remaining,nums[0].v-1);
+  const leftStart=nums[0].v-leftSlots;
+  for(let k=0;k<leftSlots;k++,wi++){
+    slots.push({card:wilds[wi],value:leftStart+k,wild:true});
+    usedWilds.add(wilds[wi].id);
+  }
+  remaining=wilds.length-wi;
+  for(let k=0;k<remaining;k++,wi++){
+    slots.push({card:wilds[wi],value:nums[nums.length-1].v+1+k,wild:true});
+    usedWilds.add(wilds[wi].id);
+  }
+  for(const c of cards)if(c.t!=='num'&&c.t!=='wild')slots.push({card:c,value:99});
+  return slots
+    .sort((a,b)=>a.value-b.value||(a.wild?1:0)-(b.wild?1:0)||String(a.card.id).localeCompare(String(b.card.id)))
+    .map(x=>x.card);
+}
 function worstCard(ai){
   const h=ai.hand;if(!h.length)return-1;
   for(let i=0;i<h.length;i++)if(h[i].t==='skip')return i;
@@ -1649,6 +1858,20 @@ function canStillFitGroup(cards,req){
   }
   return false;
 }
+function bestAcceptedForGroup(current,chosen,req){
+  if(!chosen.length)return[];
+  if(canStillFitGroup([...current,...chosen],req))return chosen;
+  let best=[];
+  const n=chosen.length;
+  const maxMask=1<<Math.min(n,20);
+  for(let mask=1;mask<maxMask;mask++){
+    const subset=[];
+    for(let i=0;i<n;i++)if(mask&(1<<i))subset.push(chosen[i]);
+    if(subset.length<=best.length)continue;
+    if(canStillFitGroup([...current,...subset],req))best=subset;
+  }
+  return best;
+}
 function validateGroup(cards,req){
   if(!cards||cards.length!==req.n)return false;
   const wilds=cards.filter(c=>c.t==='wild').length;
@@ -1673,6 +1896,22 @@ function validateGroup(cards,req){
 function cardPts(c){if(c.t==='wild')return 25;if(c.t==='skip')return 15;return c.v>=10?10:c.v;}
 function reqDesc(r){return r.t==='set'?'set of '+r.n:r.t==='run'?'run of '+r.n:r.n+' of one color';}
 function cardLbl(c){const sym=c.t==='wild'?'★':c.t==='skip'?'⊘':SYM[c.col];return c.v+''+sym;}
+function playSfx(kind='card'){
+  try{
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    if(!Ctx)return;
+    const ctx=playSfx.ctx||(playSfx.ctx=new Ctx());
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.frequency.value=kind==='skip'?180:kind==='phase'?520:320;
+    osc.type=kind==='skip'?'sawtooth':'triangle';
+    gain.gain.setValueAtTime(0.0001,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.04,ctx.currentTime+0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.12);
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.start();osc.stop(ctx.currentTime+0.13);
+  }catch(e){}
+}
 
 // ── ROUND END ──────────────────────────────────────────
 function endRound(winIdx){
@@ -1690,6 +1929,7 @@ function endRound(winIdx){
   S.roundResults=S.players.map(p=>({id:p.id,name:p.name,emoji:p.emoji,phase:p.phase,laid:p.laid,score:p.score}));
   // Advance phases
   for(const p of S.players)if(p.laid&&p.phase<9)p.phase++;
+  S.startSeat=nextSeat(S.startSeat||0);
   S.round++;S.screen='roundEnd';render();
 }
 function nextRound(){S.screen='game';startRound();}
@@ -1715,6 +1955,7 @@ function adjustHand(){
 }
 function rectCenter(rect){return{x:rect.left+rect.width/2,y:rect.top+rect.height/2};}
 function animateCardMove(card,fromEl,toEl,done,showBack=false){
+  playSfx('card');
   const from=fromEl?.getBoundingClientRect();
   const to=toEl?.getBoundingClientRect();
   if(!from||!to){done&&done();return;}
@@ -1779,6 +2020,9 @@ function render(){
   const root=document.getElementById('root');
   switch(S.screen){
     case'menu':   root.innerHTML=rMenu();break;
+    case'roomMenu':root.innerHTML=rRoomMenu();break;
+    case'joinRoom':root.innerHTML=rJoinRoom();break;
+    case'phase10Lobby':root.innerHTML=rLobby();break;
     case'game':   root.innerHTML=rGame();adjustHand();break;
     case'roundEnd':root.innerHTML=rRoundEnd();break;
     case'over':   root.innerHTML=rOver();break;
@@ -1843,20 +2087,24 @@ function rOppZone(p,horiz){
 }
 
 function rSeatLaid(p){
-  return'';
   if(!p.laid||!p.groups.length)return'';
-  const cardView=(p.id===2||p.id===3)?rTiny:rMini;
-  return`<div class="seat-laid" data-laid-pid="${p.id}">
+  const canPick=S.tPhase==='action'&&S.cur===0&&S.players[0].laid&&!S.over;
+  return`<div class="seat-laid ${canPick?'can-add':''}" data-laid-pid="${p.id}">
     <div class="seat-laid-title">Laid</div>
-    ${p.groups.map((g,gi)=>`<div class="seat-laid-group"><span style="font-size:7px;color:rgba(255,255,255,.45);font-weight:800">G${gi+1}</span>${sortCards(g).map(c=>cardView(c)).join('')}</div>`).join('')}
+    ${p.groups.map((g,gi)=>{
+      const selected=S.addTarget&&S.addTarget.pid===p.id&&S.addTarget.gi===gi;
+      return`<div class="seat-laid-group" onclick="${canPick?`selectAddTarget(${p.id},${gi})`:''}" style="${selected?'box-shadow:0 0 0 2px #ffe066,0 0 14px rgba(255,224,102,.4);border-color:rgba(255,224,102,.7)':''}"><span style="font-size:7px;color:rgba(255,255,255,.45);font-weight:800">G${gi+1}</span>${displayGroupCards(g,PHASES[p.phase].reqs[gi]).map(c=>rTiny(c)).join('')}</div>`;
+    }).join('')}
   </div>`;
 }
 function rOppZone(p,horiz){
   const ph=p.phase<10?`P${p.phase+1}`:'Done!';
   const mini=Array(Math.min(p.hand.length,7)).fill(0).map(()=>`<div class="${horiz?'mini-back':'mini-back-v'}"></div>`).join('');
   const laidBadge=p.laid?`<span style="font-size:8px;color:#22ee66;font-weight:800">Laid</span>`:`<span style="font-size:8px;color:rgba(255,220,100,0.85);font-weight:700">${ph}</span>`;
+  const skips=skipCount(p);
   return`<div class="player-zone" data-player-zone="${p.id}" style="position:relative">
     ${S.skipFx===p.id?'<div class="skip-pop">SKIPPED</div>':''}
+    ${skips?`<div class="skip-stack">SKIP x${skips}</div>`:''}
     <div class="avatar ${S.cur===p.id&&!S.over?'active':''} ${S.skipFx===p.id?'skipped':''}" style="font-size:16px">${p.emoji}</div>
     <div class="pname">${p.name}</div>
     <div class="pscore">${p.score}pts</div>
@@ -1877,7 +2125,7 @@ function rStagingOld(me){
     return`<div style="display:flex;flex-direction:column;gap:3px;width:100%;align-items:center">
       <div style="font-size:9px;color:#22ee66;font-weight:800;letter-spacing:.3px">✓ PHASE ${me.phase+1} LAID DOWN</div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center">
-        ${me.groups.map((g,gi)=>`<div style="background:rgba(34,238,102,0.1);border:1px solid rgba(34,238,102,0.3);border-radius:7px;padding:4px 6px"><div style="font-size:7px;color:rgba(34,238,102,0.8);margin-bottom:2px;font-weight:700">G${gi+1}</div><div style="display:flex;gap:2px;flex-wrap:wrap">${sortCards(g).map(c=>rMini(c)).join('')}</div></div>`).join('')}
+        ${me.groups.map((g,gi)=>`<div style="background:rgba(34,238,102,0.1);border:1px solid rgba(34,238,102,0.3);border-radius:7px;padding:4px 6px"><div style="font-size:7px;color:rgba(34,238,102,0.8);margin-bottom:2px;font-weight:700">G${gi+1}</div><div style="display:flex;gap:2px;flex-wrap:wrap">${displayGroupCards(g,PHASES[me.phase].reqs[gi]).map(c=>rMini(c)).join('')}</div></div>`).join('')}
       </div>
     </div>`;
   }
@@ -1895,7 +2143,7 @@ function rStagingOld(me){
         return`<div style="background:rgba(0,0,0,0.28);border:1.5px dashed ${bdr};border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:62px">
           <div style="font-size:7.5px;color:rgba(255,255,255,0.55);font-weight:700">${reqDesc(req)} (${g.length}/${req.n})</div>
           <div style="display:flex;gap:2px;flex-wrap:wrap;justify-content:center;min-height:32px;align-items:center">
-            ${sortCards(g).map(c=>`<div style="position:relative;display:inline-block">${rMini(c)}<button onclick="fromStage(${i},${c.id})" style="position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:#c0392b;color:#fff;border:none;font-size:7px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;z-index:5;line-height:1">×</button></div>`).join('')}
+            ${displayGroupCards(g,req).map(c=>`<div style="position:relative;display:inline-block">${rMini(c)}<button onclick="fromStage(${i},${c.id})" style="position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:#c0392b;color:#fff;border:none;font-size:7px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;z-index:5;line-height:1">×</button></div>`).join('')}
             ${g.length===0?`<span style="font-size:8px;color:rgba(255,255,255,0.18)">empty</span>`:''}
           </div>
           ${S.sel.size>0?`<button class="chip-btn" style="font-size:8px;padding:2px 8px;margin-top:1px" onclick="toStage(${i})">+ Add</button>`:''}
@@ -1961,6 +2209,15 @@ function rCenter(){
 }
 
 function rAddBtns(me){
+  if(!me.laid)return'';
+  if(S.addTarget){
+    const target=S.players[S.addTarget.pid];
+    return`<div style="display:flex;gap:5px;align-items:center;justify-content:center;margin-top:1px">
+      <div class="status-bar" style="font-size:9px;padding:3px 10px;min-width:0">Add to ${S.addTarget.pid===0?'your':target.name+"'s"} G${S.addTarget.gi+1}: click one card</div>
+      <button class="chip-btn" style="font-size:8px;padding:3px 9px" onclick="clearAddTarget()">Cancel</button>
+    </div>`;
+  }
+  return`<div class="status-bar" style="font-size:9px;padding:3px 12px;min-width:0;margin-top:1px">Click a laid group, then click a card to add.</div>`;
   if(!me.laid||S.sel.size===0)return'';
   const btns=S.players
     .filter(p=>p.laid&&p.groups.length)
@@ -1986,8 +2243,45 @@ function rLaidBoard(){
   return`<div class="laid-board">
     ${laid.map(p=>`<div class="laid-row">
       <div class="laid-owner">${p.emoji}<br>${p.id===0?'You':p.name}</div>
-      ${p.groups.map((g,gi)=>`<div class="laid-group"><span class="laid-group-label">G${gi+1}</span>${sortCards(g).map(c=>rMini(c)).join('')}</div>`).join('')}
+      ${p.groups.map((g,gi)=>{
+        const selected=S.addTarget&&S.addTarget.pid===p.id&&S.addTarget.gi===gi;
+        const canPick=S.tPhase==='action'&&S.cur===0&&S.players[0].laid&&!S.over;
+        return`<div class="laid-group" onclick="${canPick?`selectAddTarget(${p.id},${gi})`:''}" style="${canPick?'cursor:pointer;':''}${selected?'box-shadow:0 0 0 2px #ffe066,0 0 16px rgba(255,224,102,.45);border-color:rgba(255,224,102,.7)':''}"><span class="laid-group-label">G${gi+1}</span>${displayGroupCards(g,PHASES[p.phase].reqs[gi]).map(c=>rMini(c)).join('')}</div>`;
+      }).join('')}
     </div>`).join('')}
+  </div>`;
+}
+
+function rMyLaid(me){
+  if(!me.laid||!me.groups.length)return'';
+  const canPick=S.tPhase==='action'&&S.cur===0&&me.laid&&!S.over;
+  return`<div class="my-laid-area" data-laid-pid="0">
+    <div class="my-laid-title">Your laid cards</div>
+    ${me.groups.map((g,gi)=>{
+      const selected=S.addTarget&&S.addTarget.pid===0&&S.addTarget.gi===gi;
+      return`<div class="my-laid-group ${canPick?'can-add':''}" onclick="${canPick?`selectAddTarget(0,${gi})`:''}" style="${canPick?'cursor:pointer;':''}${selected?'box-shadow:0 0 0 2px #ffe066,0 0 16px rgba(255,224,102,.45);border-color:rgba(255,224,102,.7)':''}"><span class="laid-group-label">G${gi+1}</span>${displayGroupCards(g,PHASES[me.phase].reqs[gi]).map(c=>rMini(c)).join('')}</div>`;
+    }).join('')}
+  </div>`;
+}
+
+function oppSeatStyle(pid,total){
+  const m=Math.max(1,total-1);
+  const order=Array.from({length:m},(_,i)=>total-1-i);
+  const idx=order.indexOf(pid);
+  const t=m===1?0.5:idx/(m-1);
+  const x=10+t*80;
+  const arc=Math.sin(Math.PI*t);
+  const y=50-38*arc+(arc>.92?-6:0);
+  const side=t<0.28?'left':t>0.72?'right':'top';
+  return {style:`left:${x}%;top:${y}%`,side,horiz:side==='top'};
+}
+function rOppRing(){
+  const total=S.players.length;
+  return`<div class="opp-ring">
+    ${S.players.filter(p=>p.id!==0).map(p=>{
+      const pos=oppSeatStyle(p.id,total);
+      return`<div class="opp-seat" data-side="${pos.side}" style="${pos.style}">${rOppZone(p,pos.horiz)}</div>`;
+    }).join('')}
   </div>`;
 }
 
@@ -1998,6 +2292,7 @@ function rGame(){
   const active=isMyTurn&&isAction;
   const selInHand=me.hand.filter(c=>S.sel.has(c.id));
   const canDiscard=active&&selInHand.length===1;
+  const mySkips=skipCount(me);
 
   const phBar=`<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center">
     ${S.players.map(p=>`<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:6px;background:${p.laid?'rgba(34,200,80,0.22)':'rgba(255,255,255,0.07)'};border:1px solid ${p.laid?'rgba(34,200,80,0.38)':'rgba(255,255,255,0.1)'};color:${S.cur===p.id?'#ffe066':p.laid?'#22ee66':'rgba(255,255,255,0.55)'}">${p.emoji} P${p.phase+1}${p.laid?'✓':''}</span>`).join('')}
@@ -2005,19 +2300,21 @@ function rGame(){
 
   return`${rSkipPicker()}<button class="back-arrow" onclick="backToMenu()" style="z-index:50">‹</button>
   <div id="table-wrap">
-    <div class="tz-top2">${rOppZone(S.players[2],true)}</div>
-    <div class="tz-left">${rOppZone(S.players[1],false)}</div>
+    ${rOppRing()}
+    <div class="tz-top2"></div>
+    <div class="tz-left"></div>
     <div class="tz-mid">
       <div class="status-bar">${S.msg}</div>
       ${rCenter()}
       ${phBar}
-      ${rLaidBoard()}
       ${active?rStaging(me):(me.laid&&me.groups.length?rStaging(me):`<div style="font-size:9px;color:rgba(255,255,255,0.25);text-align:center;padding:4px 0">${S.cur!==0?S.players[S.cur].name+"'s turn…":S.tPhase==='draw'?'Draw a card above':''}</div>`)}
     </div>
-    <div class="tz-right">${rOppZone(S.players[3],false)}</div>
+    <div class="tz-right"></div>
     <div class="tz-btm">
+      ${rMyLaid(me)}
       <div class="my-info" style="padding:0 4px;position:relative">
         ${S.skipFx===0?'<div class="skip-pop">SKIPPED</div>':''}
+        ${mySkips?`<div class="skip-stack">SKIP x${mySkips}</div>`:''}
         <div class="my-name-ring">
           <div class="avatar ${isMyTurn&&!S.over?'active':''} ${S.skipFx===0?'skipped':''}" style="width:100%;height:100%;font-size:20px;border-radius:50%">${me.emoji}</div>
         </div>
@@ -2046,11 +2343,71 @@ function rMenu(){
       <h1>Phase 10</h1>
       <p>Complete all 10 phases before your opponents to win!</p>
     </div>
+    <div class="difficulty-box">
+      <div class="difficulty-label">Players</div>
+      <div class="difficulty-options" style="grid-template-columns:repeat(4,1fr)">
+        ${[3,4,5,6].map(n=>`<button class="difficulty-btn ${S.playerCount===n?'active':''}" onclick="setQuickPlayers(${n})">${n}</button>`).join('')}
+      </div>
+    </div>
     <div class="menu-actions">
       <button class="menu-btn primary" onclick="startGame()">▶ Play Now</button>
+      <button class="menu-btn" onclick="openRoomMenu()">Custom Room</button>
       <button class="menu-btn" onclick="showRules()">📖 How to Play</button>
     </div>
   </div>`;
+}
+
+function rRoomMenu(){
+  return`<div class="menu-screen"><div class="room-panel">
+    <div class="title" style="font-size:28px">Phase 10 Online</div>
+    <div class="subtitle">Create a room or join friends with a code.</div>
+    <div class="difficulty-box" style="width:100%">
+      <div class="difficulty-label">Room Seats</div>
+      <div class="difficulty-options" style="grid-template-columns:repeat(4,1fr)">
+        ${[3,4,5,6].map(n=>`<button class="difficulty-btn ${Number(S.roomSeats||4)===n?'active':''}" onclick="setRoomSeats(${n})">${n}</button>`).join('')}
+      </div>
+    </div>
+    <div class="menu-actions">
+      <button class="menu-btn primary" onclick="createPhase10Room()">Create Room</button>
+      <button class="menu-btn" onclick="showJoinRoom()">Join Room</button>
+      <button class="menu-btn subtle" onclick="leavePhase10Room()">Back</button>
+    </div>
+    <div class="room-msg">${S.roomMsg||''}</div>
+  </div></div>`;
+}
+
+function rJoinRoom(){
+  return`<div class="menu-screen"><div class="room-panel">
+    <div class="title" style="font-size:28px">Join Phase 10</div>
+    <input class="room-input" maxlength="6" placeholder="CODE" value="${S.joinCode||''}" oninput="S.joinCode=this.value.toUpperCase();this.value=S.joinCode">
+    <input class="room-input" maxlength="16" placeholder="NAME" value="${S.joinName||''}" oninput="S.joinName=this.value">
+    <div class="menu-actions">
+      <button class="menu-btn primary" onclick="joinPhase10Room()">Join</button>
+      <button class="menu-btn subtle" onclick="openRoomMenu()">Back</button>
+    </div>
+    <div class="room-msg">${S.roomMsg||''}</div>
+  </div></div>`;
+}
+
+function rLobby(){
+  const seats=S.seats||[];
+  const count=seats.length||Number(S.roomSeats)||4;
+  return`<div class="menu-screen"><div class="room-panel">
+    <div class="title" style="font-size:28px">Phase 10 Room</div>
+    <div class="room-code">${S.roomCode||''}</div>
+    <div class="seat-list">${Array.from({length:count},(_,i)=>{
+      const seat=seats[i];
+      return`<div class="seat-box ${seat?.type==='host'?'host':''} ${!seat?'empty':''}">
+        <div class="seat-name">${seat?escapeHtml(seat.name||('Player '+(i+1))):'Empty'}</div>
+        <div class="seat-role">${seat?(seat.type==='host'?'Host':'Player'):'Seat '+(i+1)}</div>
+      </div>`;
+    }).join('')}</div>
+    <div class="menu-actions">
+      ${S.isHost?`<button class="menu-btn primary" onclick="startPhase10Room()">Start Game</button>`:''}
+      <button class="menu-btn subtle" onclick="leavePhase10Room()">Back</button>
+    </div>
+    <div class="room-msg">${S.roomMsg||`All ${count} seats must be filled before starting.`}</div>
+  </div></div>`;
 }
 
 function rRules(){
